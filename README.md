@@ -39,8 +39,10 @@ frame stats.
 **Your watchlist, with where to watch it.** Your IMDb watchlist sits above your apps as a row of groups:
 On your apps, Recently added, Top rated, then genres like Thriller or Comedy. Move onto a group and its
 posters open underneath, each tagged NETFLIX, PRIME, HOTSTAR and so on, with the IMDb rating in the corner.
-Move along the groups and the posters change with you. Press OK on a poster and that title's page opens
-inside the app, ready to play. Titles that aren't on your apps open in Stremio, if you use it.
+Move along the groups and the posters change with you. Rest on a poster for a moment and a card opens with
+the year, running time, country, director and plot. Press OK and that title's page opens inside the app,
+ready to play, on Netflix, Prime Video, Hotstar, Apple TV, SonyLIV or Zee5. Titles that aren't on your apps
+open in Stremio, if you use it.
 
 **Less running behind your back.** About twenty packages are switched off: Hisense and Google usage
 reporting, the shop demo, the partner app installer, Data Saver (67 MB, always running), a spare keyboard,

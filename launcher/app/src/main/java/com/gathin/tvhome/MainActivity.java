@@ -115,6 +115,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     private static int lastPoster = 0;
     private static boolean lastOnGroup;
     private static boolean lastOnWatch;
+    /** Resting on a poster this long opens its details. */
+    private static final long DETAILS_DELAY_MS = 1800;
+    private View watchDetails;
+    private TextView detailsTitle, detailsMeta, detailsCredits, detailsPlot, detailsWhere;
+    private Watchlist.Item detailsItem;
+    private final Runnable showDetails = this::showDetailsNow;
     /** Delayed after Home appears, so a refresh never competes with an app being opened straight away. */
     private final Runnable watchRefresh = () -> Watchlist.refreshIfStale(this, this::showWatchlist);
     private TextView shamsiDate;
@@ -256,6 +262,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         groupAdapter = new GroupAdapter(this);
         watchGroups.setAdapter(groupAdapter);
         watchInfo = findViewById(R.id.watchInfo);
+        watchDetails = findViewById(R.id.watchDetails);
+        detailsTitle = findViewById(R.id.detailsTitle);
+        detailsMeta = findViewById(R.id.detailsMeta);
+        detailsCredits = findViewById(R.id.detailsCredits);
+        detailsPlot = findViewById(R.id.detailsPlot);
+        detailsWhere = findViewById(R.id.detailsWhere);
         watchRow = findViewById(R.id.watchRow);
         watchRow.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         watchRow.setItemAnimator(null);
@@ -359,6 +371,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
             if (!onTile) hideGlass();
             // The posters stay open while focus is on a chip or a poster, and close when it leaves both.
             if (newF != null && !inside(watchGroups, newF) && !inside(watchRow, newF)) setWatchOpen(false);
+            // Details belong to one poster: any focus move closes them (a new poster starts its own wait).
+            hideDetails();
         });
 
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -514,6 +528,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         unregisterReceiver(packageReceiver);
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(watchRefresh);
+        hideDetails();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
@@ -890,6 +905,72 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         setWatchOpen(true);
         watchInfo.setText(posterSummary(item));
         watchGlow(WatchAdapter.colorFor(item.service));
+        detailsItem = item;
+        handler.removeCallbacks(showDetails);
+        handler.postDelayed(showDetails, DETAILS_DELAY_MS);
+    }
+
+    /** The details card, under the poster that still has focus, kept on screen. */
+    private void showDetailsNow() {
+        Watchlist.Item it = detailsItem;
+        RecyclerView.ViewHolder vh = watchRow.findViewHolderForAdapterPosition(lastPoster);
+        if (it == null || vh == null || !vh.itemView.isFocused()) return;
+        detailsTitle.setText(it.title);
+        detailsMeta.setText(detailsMetaLine(it));
+        detailsCredits.setText(it.directors.isEmpty() ? "" : "Directed by " + TextUtils.join(", ", it.directors));
+        detailsCredits.setVisibility(it.directors.isEmpty() ? View.GONE : View.VISIBLE);
+        detailsPlot.setText(it.plot != null ? it.plot : "");
+        detailsPlot.setVisibility(it.plot != null && !it.plot.isEmpty() ? View.VISIBLE : View.GONE);
+        boolean onApps = !Watchlist.STREMIO.equals(it.service);
+        // SonyLIV only takes a link that starts playback (Watchlist.offerIntent), so say so.
+        String verb = "SonyLIV".equals(it.service) ? "Plays in " : "Opens in ";
+        detailsWhere.setText(onApps ? verb + it.service : "Not on your apps  ·  opens in Stremio");
+        detailsWhere.setTextColor(onApps ? lighten(WatchAdapter.colorFor(it.service)) : 0x99FFFFFF);
+
+        Rect poster = new Rect(0, 0, vh.itemView.getWidth(), vh.itemView.getHeight());
+        root.offsetDescendantRectToMyCoords(vh.itemView, poster);
+        Rect row = new Rect(0, 0, watchRow.getWidth(), watchRow.getHeight());
+        root.offsetDescendantRectToMyCoords(watchRow, row);
+        float width = 440 * density, margin = 40 * density;
+        float x = Math.max(margin, Math.min(poster.left - 8 * density, root.getWidth() - width - margin));
+        watchDetails.setX(x);
+        watchDetails.setY(row.bottom - 6 * density);
+        watchDetails.animate().cancel();
+        watchDetails.setVisibility(View.VISIBLE);
+        watchDetails.setAlpha(0f);
+        watchDetails.setTranslationY(-6 * density);
+        watchDetails.animate().alpha(1f).translationY(0f).setDuration(reducedMotion ? 90 : 200).start();
+        watchInfo.animate().alpha(0f).setDuration(120).start();   // the card says it all
+    }
+
+    private void hideDetails() {
+        handler.removeCallbacks(showDetails);
+        if (watchDetails.getVisibility() != View.VISIBLE) return;
+        watchDetails.animate().cancel();
+        watchDetails.animate().alpha(0f).setDuration(reducedMotion ? 60 : 120)
+                .withEndAction(() -> watchDetails.setVisibility(View.GONE)).start();
+        if (watchOpen) watchInfo.animate().alpha(1f).setDuration(120).start();
+    }
+
+    /** "2024  ·  1h 28m  ·  United States, Mexico  ·  IMDb 7.5 (1.8K)" */
+    private static String detailsMetaLine(Watchlist.Item it) {
+        List<String> parts = new ArrayList<>();
+        if (it.year > 0) parts.add(String.valueOf(it.year));
+        if (it.runtimeMin > 0) parts.add(it.runtimeMin >= 60 ? (it.runtimeMin / 60) + "h " + (it.runtimeMin % 60) + "m" : it.runtimeMin + "m");
+        if (!it.countries.isEmpty()) parts.add(TextUtils.join(", ", it.countries.subList(0, Math.min(2, it.countries.size()))));
+        if (it.rating > 0) {
+            String votes = it.votes >= 1_000_000 ? String.format(Locale.ROOT, "%.1fM", it.votes / 1e6)
+                    : it.votes >= 1000 ? String.format(Locale.ROOT, "%.1fK", it.votes / 1e3).replace(".0K", "K")
+                    : String.valueOf(it.votes);
+            parts.add(String.format(Locale.ROOT, "IMDb %.1f", it.rating) + (it.votes > 0 ? " (" + votes + ")" : ""));
+        }
+        return TextUtils.join("  ·  ", parts);
+    }
+
+    /** A service's colour, lifted so it reads as text on the dark card. */
+    private static int lighten(int color) {
+        int r = (color >> 16) & 0xFF, g = (color >> 8) & 0xFF, b = color & 0xFF;
+        return 0xFF000000 | ((r + (255 - r) / 3) << 16) | ((g + (255 - g) / 3) << 8) | (b + (255 - b) / 3);
     }
 
     @Override

@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # JustWatch technical name, label. Same order of preference as the home screen's default.
 SERVICES = [("netflix", "Netflix"), ("amazonprimevideo", "Prime Video"), ("jiohotstar", "Hotstar"),
-            ("zee5", "Zee5"), ("sonyliv", "SonyLIV")]
+            ("appletvplus", "Apple TV"), ("sonyliv", "SonyLIV"), ("zee5", "Zee5")]
 IMDB = "https://caching.graphql.imdb.com/"
 IMDB_HEADERS = {"x-imdb-client-name": "imdb-web-next-localized"}
 

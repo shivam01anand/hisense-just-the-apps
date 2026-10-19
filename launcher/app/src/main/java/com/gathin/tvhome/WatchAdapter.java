@@ -89,6 +89,10 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
                 return 0xFF1F4FD8;
             case "Zee5":
                 return 0xFF8230C6;
+            case "SonyLIV":
+                return 0xFFE0661B;
+            case "Apple TV":
+                return 0xFF5A5A5E;
             default:
                 return 0xFF7B5BD6;   // Stremio
         }

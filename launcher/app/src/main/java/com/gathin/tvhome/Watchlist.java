@@ -53,8 +53,9 @@ final class Watchlist {
     private static final long RECHECK_MS = 3 * 24 * 60 * 60 * 1000L;
     /** Re-checks per refresh, so a refresh after the first one stays a handful of requests. */
     private static final int MAX_RECHECKS = 25;
-    /** Bumped when the saved list gains fields; an older list is refreshed on the next Home. 2: genres, rating. */
-    private static final int DATA_VERSION = 2;
+    /** Bumped when the saved list gains fields; an older list is refreshed on the next Home.
+     *  2: genres, rating. 3: runtime, countries, plot, directors, votes. */
+    private static final int DATA_VERSION = 3;
 
     static final String STREMIO = "Stremio";
 
@@ -62,9 +63,14 @@ final class Watchlist {
         String imdb, title, type, posterUrl, service, pkg, intentUri;
         int year;
         long checked;
-        /** IMDb's rating out of 10; 0 when it has none. */
+        /** IMDb's rating out of 10 and its number of votes; 0 when it has none. */
         double rating;
+        int votes;
+        int runtimeMin;
+        String plot;
         List<String> genres = new ArrayList<>();
+        List<String> countries = new ArrayList<>();
+        List<String> directors = new ArrayList<>();
     }
 
     /** A chip on the groups row and the posters it opens. */
@@ -174,8 +180,12 @@ final class Watchlist {
                 it.intentUri = o.optString("intent", null);
                 it.checked = o.optLong("checked");
                 it.rating = o.optDouble("rating", 0);
-                JSONArray g = o.optJSONArray("genres");
-                for (int k = 0; g != null && k < g.length(); k++) it.genres.add(g.optString(k));
+                it.votes = o.optInt("votes");
+                it.runtimeMin = o.optInt("runtime");
+                it.plot = o.optString("plot", null);
+                strings(o.optJSONArray("genres"), it.genres);
+                strings(o.optJSONArray("countries"), it.countries);
+                strings(o.optJSONArray("directors"), it.directors);
                 out.add(it);
             }
         } catch (Exception e) {
@@ -185,6 +195,13 @@ final class Watchlist {
         return out;
     }
 
+    private static void strings(JSONArray a, List<String> into) {
+        for (int k = 0; a != null && k < a.length(); k++) {
+            String v = a.optString(k);
+            if (!v.isEmpty()) into.add(v);
+        }
+    }
+
     private static void save(Context c, List<Item> items) throws IOException, JSONException {
         JSONArray a = new JSONArray();
         for (Item it : items) {
@@ -192,7 +209,9 @@ final class Watchlist {
                     .put("imdb", it.imdb).put("title", it.title).put("type", it.type).put("year", it.year)
                     .put("poster", it.posterUrl).put("service", it.service).put("pkg", it.pkg)
                     .put("intent", it.intentUri).put("checked", it.checked)
-                    .put("rating", it.rating).put("genres", new JSONArray(it.genres)));
+                    .put("rating", it.rating).put("votes", it.votes).put("runtime", it.runtimeMin).put("plot", it.plot)
+                    .put("genres", new JSONArray(it.genres)).put("countries", new JSONArray(it.countries))
+                    .put("directors", new JSONArray(it.directors)));
         }
         File tmp = new File(dir(c), "items.json.tmp");
         try (OutputStream out = new FileOutputStream(tmp)) {
@@ -217,7 +236,7 @@ final class Watchlist {
         new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
-                List<Item> items = refresh(c);
+                List<Item> items = refresh(c, prefs);
                 prefs.edit().putLong("ok", System.currentTimeMillis()).putInt("version", DATA_VERSION).apply();
                 new Handler(Looper.getMainLooper()).post(() -> listener.onWatchlist(items));
             } catch (Exception | OutOfMemoryError e) {
@@ -228,11 +247,15 @@ final class Watchlist {
         }, "watchlist").start();
     }
 
-    private static List<Item> refresh(Context c) throws IOException, JSONException {
+    private static List<Item> refresh(Context c, SharedPreferences prefs) throws IOException, JSONException {
         Map<String, Item> saved = new HashMap<>();
         for (Item it : load(c)) saved.put(it.imdb, it);
         Config cfg = Config.load(c);
         List<Service> services = installedServices(c, cfg.watchlistServices);
+        // A service added (an app installed, or the list changed) can hold any title: look every one up again.
+        StringBuilder sig = new StringBuilder();
+        for (Service sv : services) sig.append(sv.tech).append(',');
+        boolean servicesChanged = !sig.toString().equals(prefs.getString("services", ""));
         String country = cfg.watchlistCountry;
         long now = System.currentTimeMillis();
         int rechecks = 0;
@@ -240,8 +263,8 @@ final class Watchlist {
         List<Item> items = fetchImdbWatchlist(cfg.watchlistImdbUser);
         for (Item it : items) {
             Item old = saved.get(it.imdb);
-            boolean stale = old == null || now - old.checked > RECHECK_MS;
-            if (old != null && (!stale || rechecks >= MAX_RECHECKS)) {
+            boolean stale = old == null || servicesChanged || now - old.checked > RECHECK_MS;
+            if (old != null && (!stale || (!servicesChanged && rechecks >= MAX_RECHECKS))) {
                 it.service = old.service;
                 it.pkg = old.pkg;
                 it.intentUri = old.intentUri;
@@ -266,6 +289,7 @@ final class Watchlist {
             fetchPoster(c, it);
         }
         save(c, items);
+        prefs.edit().putString("services", sig.toString()).apply();
         return items;
     }
 
@@ -286,7 +310,9 @@ final class Watchlist {
         String q = "query { predefinedList(classType: WATCH_LIST, userId: \"" + user + "\") {"
                 + " items(first: 250, sort: {by: CREATED_DATE, order: DESC}) { edges { node { listItem {"
                 + " ... on Title { id titleText { text } releaseYear { year } titleType { id } primaryImage { url }"
-                + " ratingsSummary { aggregateRating } titleGenres { genres { genre { text } } } }"
+                + " ratingsSummary { aggregateRating voteCount } titleGenres { genres { genre { text } } }"
+                + " runtime { seconds } countriesOfOrigin { countries { text } } plot { plotText { plainText } }"
+                + " directors: credits(first: 2, filter: {categories: [\"director\"]}) { edges { node { name { nameText { text } } } } } }"
                 + " } } } } } }";
         JSONObject d = post("https://caching.graphql.imdb.com/", new JSONObject().put("query", q),
                 "x-imdb-client-name", "imdb-web-next-localized");
@@ -308,6 +334,25 @@ final class Watchlist {
             JSONObject ratings = t.optJSONObject("ratingsSummary");
             it.rating = ratings != null ? ratings.optDouble("aggregateRating", 0) : 0;
             if (Double.isNaN(it.rating)) it.rating = 0;
+            it.votes = ratings != null ? ratings.optInt("voteCount") : 0;
+            JSONObject runtime = t.optJSONObject("runtime");
+            it.runtimeMin = runtime != null ? runtime.optInt("seconds") / 60 : 0;
+            JSONObject plot = t.optJSONObject("plot");
+            JSONObject plotText = plot != null ? plot.optJSONObject("plotText") : null;
+            it.plot = plotText != null && !plotText.isNull("plainText") ? plotText.optString("plainText") : null;
+            JSONObject coo = t.optJSONObject("countriesOfOrigin");
+            JSONArray cs = coo != null ? coo.optJSONArray("countries") : null;
+            for (int k = 0; cs != null && k < cs.length(); k++) {
+                String v = cs.getJSONObject(k).optString("text");
+                if (!v.isEmpty()) it.countries.add(v);
+            }
+            JSONObject dirs = t.optJSONObject("directors");
+            JSONArray ds = dirs != null ? dirs.optJSONArray("edges") : null;
+            for (int k = 0; ds != null && k < ds.length(); k++) {
+                JSONObject name = ds.getJSONObject(k).getJSONObject("node").optJSONObject("name");
+                JSONObject nt = name != null ? name.optJSONObject("nameText") : null;
+                if (nt != null && !nt.optString("text").isEmpty()) it.directors.add(nt.optString("text"));
+            }
             JSONObject tg = t.optJSONObject("titleGenres");
             JSONArray gs = tg != null ? tg.optJSONArray("genres") : null;
             for (int k = 0; gs != null && k < gs.length(); k++) {
@@ -362,12 +407,13 @@ final class Watchlist {
     }
 
     /**
-     * The link that opens the title's page. JustWatch's Android TV links for Netflix and Prime Video start
-     * playback, so those use the web URL of the title page, which both apps open in place. Hotstar's own
-     * hotstar://content link opens its title page. Whatever the link says, it may only open the service's app.
+     * The link that opens the title. JustWatch's Android TV links for Netflix and Prime Video start playback, so
+     * those use the web URL of the title page, which both apps open in place. SonyLIV ignores its own sony://
+     * link and plays the title from its web URL. Hotstar's hotstar://content link opens its title page.
+     * Whatever the link says, it may only open the service's app.
      */
     private static Intent offerIntent(Service s, String web, String deeplink) {
-        if (web != null && (s.tech.equals("netflix") || s.tech.equals("amazonprimevideo"))) {
+        if (web != null && (s.tech.equals("netflix") || s.tech.equals("amazonprimevideo") || s.tech.equals("sonyliv"))) {
             Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(web)).setPackage(s.pkg);
             if (s.tech.equals("netflix")) i.putExtra("source", "30");   // Netflix's launch source for TV home screens
             return i;

@@ -90,7 +90,8 @@
         <item>netflix|Netflix|com.netflix.ninja</item>
         <item>amazonprimevideo|Prime Video|com.amazon.amazonvideo.livingroom</item>
         <item>jiohotstar|Hotstar|in.startv.hotstar</item>
-        <item>zee5|Zee5|com.graymatrix.did</item>
+        <item>appletvplus|Apple TV|com.apple.atve.androidtv.appletv</item>
         <item>sonyliv|SonyLIV|com.sonyliv</item>
+        <item>zee5|Zee5|com.graymatrix.did</item>
     </string-array>
 </resources>

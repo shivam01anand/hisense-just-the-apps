@@ -29,3 +29,5 @@ first picture; that is the firmware and does not change.
   `stremio://` link opens its add-on installer); 1.10 from stremio.com/downloads can. It ignores a link while
   already open, so the home screen restarts it for each title.
 - **Prime Video** asks who's watching on a fresh start, then continues to the title.
+- **SonyLIV** ignores JustWatch's `sony://asset/...` link (it lands on its home screen) but plays the title
+  straight away from its `https://www.sonyliv.com/movies/...` web link, so that's what the home screen uses.
