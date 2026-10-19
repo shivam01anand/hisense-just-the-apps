@@ -188,13 +188,28 @@
             </LinearLayout>
         </RelativeLayout>
 
-        <!-- Watchlist row (Watchlist, WatchAdapter): hidden until there is a saved list. Sits above the
-             grid, so the dock keeps its place at the bottom and the top shelf stays between the two. -->
+        <!-- Watchlist (Watchlist, GroupAdapter, WatchAdapter): a row of groups ("On your apps", "Recently
+             added", genres). Moving onto it opens that group's posters underneath, with a line about what is
+             focused; leaving it closes them. Their space stays reserved, so the dock never moves. Hidden until
+             there is a saved list. -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/watchGroups"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginTop="6dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp"
+            android:clipToPadding="false"
+            android:clipChildren="false"
+            android:overScrollMode="never"
+            android:scrollbars="none"
+            android:descendantFocusability="afterDescendants"
+            android:visibility="gone" />
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/watchRow"
             android:layout_width="match_parent"
-            android:layout_height="130dp"
-            android:layout_marginTop="8dp"
+            android:layout_height="122dp"
             android:paddingTop="9dp"
             android:paddingBottom="9dp"
             android:clipToPadding="false"
@@ -202,6 +217,20 @@
             android:overScrollMode="never"
             android:scrollbars="none"
             android:descendantFocusability="afterDescendants"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/watchInfo"
+            android:layout_width="match_parent"
+            android:layout_height="24dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:gravity="center_vertical"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:textColor="#FFFFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="@font/outfit"
             android:visibility="gone" />
 
         <!-- The wrapper clips at the grid's edge; the grid itself must not clip so scaled tiles can overflow their cells. -->

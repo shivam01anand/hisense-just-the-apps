@@ -49,7 +49,7 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
     private final List<Watchlist.Item> items = new ArrayList<>();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService decoder = Executors.newSingleThreadExecutor();
-    /** About 70 posters at 200×296 RGB_565; the row shows ten at a time. */
+    /** About 70 posters at 200×296 RGB_565; the row shows eleven at a time. */
     private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(8 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
@@ -111,6 +111,8 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
         h.title.setText(it.title);
         h.chip.setText(chipFor(it.service));
         h.chip.setBackgroundTintList(ColorStateList.valueOf(colorFor(it.service)));
+        h.rating.setText(it.rating > 0 ? String.format(java.util.Locale.ROOT, "★ %.1f", it.rating) : "");
+        h.rating.setVisibility(it.rating > 0 ? View.VISIBLE : View.GONE);
         h.image.setTag(it.imdb);
         Bitmap cached = cache.get(it.imdb);
         h.image.setImageBitmap(cached);
@@ -142,12 +144,14 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
         final ImageView image;
         final TextView title;
         final TextView chip;
+        final TextView rating;
 
         Holder(View v) {
             super(v);
             image = v.findViewById(R.id.posterImage);
             title = v.findViewById(R.id.posterTitle);
             chip = v.findViewById(R.id.posterChip);
+            rating = v.findViewById(R.id.posterRating);
             v.setClipToOutline(true);   // rounded corners from poster_bg
 
             v.setOnClickListener(view -> {

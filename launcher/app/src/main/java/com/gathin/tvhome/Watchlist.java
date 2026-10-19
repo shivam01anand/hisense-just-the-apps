@@ -29,6 +29,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,8 @@ final class Watchlist {
     private static final long RECHECK_MS = 3 * 24 * 60 * 60 * 1000L;
     /** Re-checks per refresh, so a refresh after the first one stays a handful of requests. */
     private static final int MAX_RECHECKS = 25;
+    /** Bumped when the saved list gains fields; an older list is refreshed on the next Home. 2: genres, rating. */
+    private static final int DATA_VERSION = 2;
 
     static final String STREMIO = "Stremio";
 
@@ -59,6 +62,59 @@ final class Watchlist {
         String imdb, title, type, posterUrl, service, pkg, intentUri;
         int year;
         long checked;
+        /** IMDb's rating out of 10; 0 when it has none. */
+        double rating;
+        List<String> genres = new ArrayList<>();
+    }
+
+    /** A chip on the groups row and the posters it opens. */
+    static final class Group {
+        final String label;
+        final List<Item> items;
+
+        Group(String label, List<Item> items) {
+            this.label = label;
+            this.items = items;
+        }
+    }
+
+    /**
+     * The groups row: "On your apps", "Recently added", "Top rated", then genres from largest to smallest. A genre
+     * that covers most of the list (Drama, on many lists) narrows nothing, so it is left out, and so is any genre
+     * with fewer than three titles.
+     */
+    static List<Group> groups(List<Item> items) {
+        List<Group> out = new ArrayList<>();
+        if (items.isEmpty()) return out;
+        List<Item> onApps = new ArrayList<>();
+        List<Item> rated = new ArrayList<>();
+        Map<String, List<Item>> byGenre = new HashMap<>();
+        for (Item it : items) {
+            if (!STREMIO.equals(it.service)) onApps.add(it);
+            if (it.rating > 0) rated.add(it);
+            for (String g : it.genres) {
+                List<Item> l = byGenre.get(g);
+                if (l == null) byGenre.put(g, l = new ArrayList<>());
+                l.add(it);
+            }
+        }
+        if (!onApps.isEmpty()) out.add(new Group("On your apps", onApps));
+        out.add(new Group("Recently added", items));
+        // A fixed bar suits nobody (one list has 167 titles at 8.0+ and 15 at 8.5+), so "Top rated" is the
+        // best-rated quarter of the list, between 10 and 40 titles, best first.
+        if (rated.size() >= 12) {
+            Collections.sort(rated, (a, b) -> Double.compare(b.rating, a.rating));
+            int n = Math.min(40, Math.max(10, items.size() / 4));
+            out.add(new Group("Top rated", new ArrayList<>(rated.subList(0, Math.min(n, rated.size())))));
+        }
+        List<Map.Entry<String, List<Item>>> genres = new ArrayList<>(byGenre.entrySet());
+        Collections.sort(genres, (a, b) -> b.getValue().size() != a.getValue().size()
+                ? b.getValue().size() - a.getValue().size() : a.getKey().compareTo(b.getKey()));
+        for (Map.Entry<String, List<Item>> e : genres) {
+            int n = e.getValue().size();
+            if (n >= 3 && n * 4 <= items.size() * 3) out.add(new Group(e.getKey(), e.getValue()));
+        }
+        return out;
     }
 
     /** A streaming service the owner has: JustWatch's technical name, the label shown, the app's package. */
@@ -117,6 +173,9 @@ final class Watchlist {
                 it.pkg = o.optString("pkg", null);
                 it.intentUri = o.optString("intent", null);
                 it.checked = o.optLong("checked");
+                it.rating = o.optDouble("rating", 0);
+                JSONArray g = o.optJSONArray("genres");
+                for (int k = 0; g != null && k < g.length(); k++) it.genres.add(g.optString(k));
                 out.add(it);
             }
         } catch (Exception e) {
@@ -132,7 +191,8 @@ final class Watchlist {
             a.put(new JSONObject()
                     .put("imdb", it.imdb).put("title", it.title).put("type", it.type).put("year", it.year)
                     .put("poster", it.posterUrl).put("service", it.service).put("pkg", it.pkg)
-                    .put("intent", it.intentUri).put("checked", it.checked));
+                    .put("intent", it.intentUri).put("checked", it.checked)
+                    .put("rating", it.rating).put("genres", new JSONArray(it.genres)));
         }
         File tmp = new File(dir(c), "items.json.tmp");
         try (OutputStream out = new FileOutputStream(tmp)) {
@@ -148,7 +208,9 @@ final class Watchlist {
         if (!enabled(context)) return;
         SharedPreferences prefs = context.getSharedPreferences("watchlist", Context.MODE_PRIVATE);
         long now = System.currentTimeMillis();
-        if (now - prefs.getLong("ok", 0) < REFRESH_MS || now - prefs.getLong("tried", 0) < RETRY_MS) return;
+        boolean outdated = prefs.getInt("version", 1) < DATA_VERSION;
+        if (now - prefs.getLong("tried", 0) < RETRY_MS) return;
+        if (!outdated && now - prefs.getLong("ok", 0) < REFRESH_MS) return;
         if (!running.compareAndSet(false, true)) return;
         prefs.edit().putLong("tried", now).apply();
         final Context c = context.getApplicationContext();
@@ -156,7 +218,7 @@ final class Watchlist {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
                 List<Item> items = refresh(c);
-                prefs.edit().putLong("ok", System.currentTimeMillis()).apply();
+                prefs.edit().putLong("ok", System.currentTimeMillis()).putInt("version", DATA_VERSION).apply();
                 new Handler(Looper.getMainLooper()).post(() -> listener.onWatchlist(items));
             } catch (Exception | OutOfMemoryError e) {
                 Log.w(TAG, "refresh failed, keeping the saved list", e);
@@ -223,7 +285,8 @@ final class Watchlist {
     private static List<Item> fetchImdbWatchlist(String user) throws IOException, JSONException {
         String q = "query { predefinedList(classType: WATCH_LIST, userId: \"" + user + "\") {"
                 + " items(first: 250, sort: {by: CREATED_DATE, order: DESC}) { edges { node { listItem {"
-                + " ... on Title { id titleText { text } releaseYear { year } titleType { id } primaryImage { url } }"
+                + " ... on Title { id titleText { text } releaseYear { year } titleType { id } primaryImage { url }"
+                + " ratingsSummary { aggregateRating } titleGenres { genres { genre { text } } } }"
                 + " } } } } } }";
         JSONObject d = post("https://caching.graphql.imdb.com/", new JSONObject().put("query", q),
                 "x-imdb-client-name", "imdb-web-next-localized");
@@ -242,6 +305,15 @@ final class Watchlist {
             JSONObject img = t.optJSONObject("primaryImage");
             // IMDb's image server scales on request: 200 px wide is about 16 KB instead of a 2000 px original.
             it.posterUrl = img != null ? img.getString("url").replaceFirst("\\._V1_.*\\.jpg$", "._V1_UX200_.jpg") : null;
+            JSONObject ratings = t.optJSONObject("ratingsSummary");
+            it.rating = ratings != null ? ratings.optDouble("aggregateRating", 0) : 0;
+            if (Double.isNaN(it.rating)) it.rating = 0;
+            JSONObject tg = t.optJSONObject("titleGenres");
+            JSONArray gs = tg != null ? tg.optJSONArray("genres") : null;
+            for (int k = 0; gs != null && k < gs.length(); k++) {
+                JSONObject g = gs.getJSONObject(k).optJSONObject("genre");
+                if (g != null && !g.optString("text").isEmpty()) it.genres.add(g.optString("text"));
+            }
             out.add(it);
         }
         return out;

@@ -37,6 +37,7 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -65,14 +66,16 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
  */
-public class MainActivity extends Activity implements AppAdapter.TileListener, WatchAdapter.Listener {
+public class MainActivity extends Activity implements AppAdapter.TileListener, WatchAdapter.Listener, GroupAdapter.Listener {
 
     /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
     static int COLUMNS = 4;
@@ -98,13 +101,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     /** config.xml or config.json, show_inputs_pill / show_network_pill. */
     private boolean showInputsPill;
     private boolean showNetworkPill;
+    private RecyclerView watchGroups;
+    private GroupAdapter groupAdapter;
     private RecyclerView watchRow;
     private WatchAdapter watchAdapter;
-    /** Last focused poster, and whether the watchlist row had focus when Home was left. */
+    private TextView watchInfo;
+    private List<Watchlist.Group> groups = Collections.emptyList();
+    /** The group whose posters are in the row, and whether the row is open (focus on a chip or a poster). */
+    private int shownGroup = -1;
+    private boolean watchOpen;
+    /** Last focused group and poster, and whether one of them had focus when Home was left. */
+    private static int lastGroup = 0;
     private static int lastPoster = 0;
+    private static boolean lastOnGroup;
     private static boolean lastOnWatch;
-    /** Top of the dock tiles in root coordinates, from the last dock focus; the top shelf sits above it. */
-    private float dockTopInRoot = -1;
     /** Delayed after Home appears, so a refresh never competes with an app being opened straight away. */
     private final Runnable watchRefresh = () -> Watchlist.refreshIfStale(this, this::showWatchlist);
     private TextView shamsiDate;
@@ -240,6 +250,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         grid.setAdapter(adapter);
 
+        watchGroups = findViewById(R.id.watchGroups);
+        watchGroups.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        watchGroups.setItemAnimator(null);
+        groupAdapter = new GroupAdapter(this);
+        watchGroups.setAdapter(groupAdapter);
+        watchInfo = findViewById(R.id.watchInfo);
         watchRow = findViewById(R.id.watchRow);
         watchRow.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         watchRow.setItemAnimator(null);
@@ -322,8 +338,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                // Back to the watchlist row, or the dock tile Up came from, not wherever the focus finder lands.
-                if (watchRowShown()) focusPoster(lastPoster);
+                // Back to the watchlist groups, or the dock tile Up came from, not wherever the focus finder lands.
+                if (watchShown()) focusGroup(lastGroup);
                 else focusTile(lastFocused % COLUMNS);
                 return true;
             }
@@ -341,6 +357,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
             boolean onTile = newF != null && newF.getId() == R.id.card;
             if (!onTile) hideGlass();
+            // The posters stay open while focus is on a chip or a poster, and close when it leaves both.
+            if (newF != null && !inside(watchGroups, newF) && !inside(watchRow, newF)) setWatchOpen(false);
         });
 
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -398,6 +416,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         grid.scrollToPosition(0);
         lastFocused = 0;
         lastOnWatch = false;
+        lastOnGroup = false;
         lastPoster = 0;
         watchRow.scrollToPosition(0);
         lastFocusedKey = adapter.getItemCount() > 0 ? adapter.keyAt(0) : null;
@@ -476,8 +495,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         final String returnKey = lastFocusedKey;
         final int returnSlot = lastFocused;
         grid.post(() -> {
-            if (lastOnWatch && watchRowShown()) {
+            if (lastOnWatch && watchShown()) {
                 focusPoster(lastPoster);
+            } else if (lastOnGroup && watchShown()) {
+                focusGroup(lastGroup);
             } else {
                 int pos = adapter.positionOf(returnKey);
                 focusTile(pos >= 0 ? pos : returnSlot);
@@ -526,6 +547,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     @Override
     public void onTileFocused(int position, View card) {
         lastOnWatch = false;
+        lastOnGroup = false;
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
@@ -569,8 +591,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
                 if (reducedMotion) grid.scrollBy(0, dy);
                 else grid.smoothScrollBy(0, dy);
             }
-            dockTopInRoot = scroll ? r.top - dy : r.top;
-            showHero(position, dockTopInRoot);
+            showHero(position, scroll ? r.top - dy : r.top);
         } else {
             hideHero();
             // Scroll just enough so the whole glass (not only the tile) is visible.
@@ -688,8 +709,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (position < COLUMNS) {
-                if (!watchRowShown()) return false;        // dock row: let focus move to the top bar
-                focusPoster(lastPoster);                   // dock row: up to the watchlist row
+                if (!watchShown()) return false;           // dock row: let focus move to the top bar
+                focusGroup(lastGroup);                     // dock row: up to the watchlist groups
                 return true;
             }
             target = position - COLUMNS;
@@ -730,17 +751,82 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         grid.smoothScrollToPosition(pos);
     }
 
-    // ---- watchlist row ---------------------------------------------------------------------------
+    // ---- watchlist --------------------------------------------------------------------------------
 
     private void showWatchlist(List<Watchlist.Item> items) {
-        boolean hadFocus = watchRow.hasFocus();
-        watchAdapter.setItems(items);
-        watchRow.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
-        if (hadFocus && !items.isEmpty()) focusPoster(Math.min(lastPoster, items.size() - 1));
+        boolean hadFocus = watchGroups.hasFocus() || watchRow.hasFocus();
+        int keepPoster = lastPoster;
+        groups = Watchlist.groups(items);
+        groupAdapter.setGroups(groups);
+        boolean any = !groups.isEmpty();
+        watchGroups.setVisibility(any ? View.VISIBLE : View.GONE);
+        // Closed, the posters and the info line stay INVISIBLE: their space is kept, so the dock never moves.
+        int closed = any ? View.INVISIBLE : View.GONE;
+        watchRow.setVisibility(any && watchOpen ? View.VISIBLE : closed);
+        watchInfo.setVisibility(any && watchOpen ? View.VISIBLE : closed);
+        if (!any) return;
+        lastGroup = Math.min(lastGroup, groups.size() - 1);
+        shownGroup = -1;
+        showGroup(lastGroup);
+        lastPoster = Math.min(keepPoster, watchAdapter.getItemCount() - 1);
+        if (hadFocus) focusGroup(lastGroup);
     }
 
-    private boolean watchRowShown() {
-        return watchRow.getVisibility() == View.VISIBLE && watchAdapter.getItemCount() > 0;
+    private boolean watchShown() {
+        return watchGroups.getVisibility() == View.VISIBLE && !groups.isEmpty();
+    }
+
+    /** Puts a group's posters in the row; its chip stays lit while focus is on them. */
+    private void showGroup(int position) {
+        if (position == shownGroup) return;
+        shownGroup = position;
+        groupAdapter.setSelected(position);
+        watchAdapter.setItems(groups.get(position).items);
+        watchRow.scrollToPosition(0);
+        lastPoster = 0;
+    }
+
+    private void setWatchOpen(boolean open) {
+        if (open == watchOpen || groups.isEmpty()) return;
+        watchOpen = open;
+        for (View v : new View[]{watchRow, watchInfo}) {
+            v.animate().cancel();
+            if (open) {
+                v.setVisibility(View.VISIBLE);
+                v.setAlpha(0f);
+                v.animate().alpha(1f).setDuration(reducedMotion ? 80 : 180).start();
+            } else {
+                v.animate().alpha(0f).setDuration(reducedMotion ? 60 : 140).withEndAction(() -> {
+                    if (!watchOpen) v.setVisibility(View.INVISIBLE);
+                }).start();
+            }
+        }
+    }
+
+    private static boolean inside(View parent, View v) {
+        for (View p = v; p != null; p = p.getParent() instanceof View ? (View) p.getParent() : null) {
+            if (p == parent) return true;
+        }
+        return false;
+    }
+
+    private void focusGroup(int position) {
+        if (groups.isEmpty()) {
+            focusTile(lastFocused % COLUMNS);
+            return;
+        }
+        final int pos = Math.max(0, Math.min(position, groups.size() - 1));
+        RecyclerView.ViewHolder vh = watchGroups.findViewHolderForAdapterPosition(pos);
+        if (vh != null) {
+            if (vh.itemView.isFocused()) onGroupFocused(pos);
+            else vh.itemView.requestFocus();
+            return;
+        }
+        watchGroups.scrollToPosition(pos);
+        watchGroups.post(() -> {
+            RecyclerView.ViewHolder h = watchGroups.findViewHolderForAdapterPosition(pos);
+            if (h != null) h.itemView.requestFocus();
+        });
     }
 
     private void focusPoster(int position) {
@@ -749,10 +835,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
             focusTile(lastFocused % COLUMNS);
             return;
         }
+        setWatchOpen(true);   // an INVISIBLE row cannot take focus
         final int pos = Math.max(0, Math.min(position, count - 1));
         RecyclerView.ViewHolder vh = watchRow.findViewHolderForAdapterPosition(pos);
         if (vh != null) {
-            // Already focused (e.g. back from an app): no focus change fires, so show its shelf by hand.
+            // Already focused (e.g. back from an app): no focus change fires, so update the info line by hand.
             if (vh.itemView.isFocused()) onPosterFocused(pos, watchAdapter.itemAt(pos));
             else vh.itemView.requestFocus();
             return;
@@ -765,11 +852,44 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     }
 
     @Override
+    public void onGroupFocused(int position) {
+        lastGroup = position;
+        lastOnGroup = true;
+        lastOnWatch = false;
+        hideGlass();
+        quietShelf();
+        setWatchOpen(true);
+        showGroup(position);
+        watchInfo.setText(groupSummary(groups.get(position)));
+    }
+
+    @Override
+    public boolean onGroupKey(int position, int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                btnSettings.requestFocus();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                focusPoster(lastPoster);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                return position == 0;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                return position == groups.size() - 1;
+            default:
+                return false;
+        }
+    }
+
+    @Override
     public void onPosterFocused(int position, Watchlist.Item item) {
         lastPoster = position;
         lastOnWatch = true;
+        lastOnGroup = false;
         hideGlass();
-        showShelf(item.title, WatchAdapter.colorFor(item.service), dockTop());
+        setWatchOpen(true);
+        watchInfo.setText(posterSummary(item));
+        watchGlow(WatchAdapter.colorFor(item.service));
     }
 
     @Override
@@ -781,7 +901,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     public boolean onPosterKey(int position, int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP:
-                btnSettings.requestFocus();
+                focusGroup(lastGroup);
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 focusTile(lastFocused < COLUMNS ? lastFocused : 0);
@@ -795,12 +915,56 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         }
     }
 
-    /** Where the dock tiles start, from the last dock focus, or from the grid's padding before there was one. */
-    private float dockTop() {
-        if (dockTopInRoot >= 0) return dockTopInRoot;
-        Rect r = new Rect(0, 0, grid.getWidth(), grid.getHeight());
-        root.offsetDescendantRectToMyCoords(grid, r);
-        return r.top + grid.getPaddingTop() + (6 + 8) * density;   // DockDecoration offset + item padding
+    /** "51 titles  ·  12 on your apps"; for "On your apps" itself, how many are on each service. */
+    private CharSequence groupSummary(Watchlist.Group g) {
+        Map<String, Integer> byService = new LinkedHashMap<>();
+        int onApps = 0;
+        for (Watchlist.Item it : g.items) {
+            if (Watchlist.STREMIO.equals(it.service)) continue;
+            onApps++;
+            Integer n = byService.get(it.service);
+            byService.put(it.service, n == null ? 1 : n + 1);
+        }
+        StringBuilder text = new StringBuilder();
+        if (onApps == g.items.size()) {
+            for (Map.Entry<String, Integer> e : byService.entrySet()) {
+                if (text.length() > 0) text.append("  ·  ");
+                text.append(e.getValue()).append(" on ").append(e.getKey());
+            }
+        } else {
+            text.append(g.items.size()).append(g.items.size() == 1 ? " title" : " titles");
+            if (onApps > 0) text.append("  ·  ").append(onApps).append(" on your apps");
+        }
+        SpannableString s = new SpannableString(text);
+        s.setSpan(new ForegroundColorSpan(0x99FFFFFF), 0, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return s;
+    }
+
+    /** "Frida    2024  ·  IMDb 7.5  ·  Prime Video  ·  Documentary, Animation", the details dimmed. */
+    private CharSequence posterSummary(Watchlist.Item it) {
+        StringBuilder meta = new StringBuilder();
+        if (it.year > 0) meta.append(it.year);
+        if (it.rating > 0) meta.append(meta.length() > 0 ? "  ·  " : "").append(String.format(Locale.ROOT, "IMDb %.1f", it.rating));
+        meta.append(meta.length() > 0 ? "  ·  " : "").append(it.service);
+        if (!it.genres.isEmpty()) meta.append("  ·  ").append(TextUtils.join(", ", it.genres.subList(0, Math.min(2, it.genres.size()))));
+        SpannableString s = new SpannableString(it.title + "    " + meta);
+        s.setSpan(new ForegroundColorSpan(0x99FFFFFF), it.title.length(), s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return s;
+    }
+
+    /** The watchlist has its own info line, so the top shelf fades out, with its glow. */
+    private void quietShelf() {
+        heroShown = false;
+        heroName.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();
+        ambient.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
+    }
+
+    /** On a poster: no shelf, but the glow in the colour of the service it opens in. */
+    private void watchGlow(int color) {
+        heroShown = false;
+        heroName.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();
+        setAmbient(color);
+        ambient.animate().alpha(1f).setDuration(reducedMotion ? 120 : 400).start();
     }
 
     private View firstVisiblePill() {
