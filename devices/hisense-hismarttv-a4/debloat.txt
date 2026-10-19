@@ -1,0 +1,46 @@
+# Hisense HiSmartTV A4 (device xiaoyushan, MStar m7322), Android TV 9, firmware 01.00.00.07, India.
+# Sold as the 55U6G. Other 2021 Hisense Android TVs on the same board likely match: check with
+#   adb shell getprop ro.product.device   ->  xiaoyushan
+# Tested 19-20 Oct 2026: applied group by group with tools/disable-group.sh, which restarts the TV and checks
+# it after each group. Normal boot every time; HDMI 1-3, AV and the tuner still listed.
+#
+# Never switch these off (details in NOTES.md):
+#   com.hisense.tv.smartsense, com.hisense.tv.smartservice, com.vt.tv.smartsense.ui
+#     (switching this family off sent a Hisense FFM into an Android Recovery loop)
+#   com.hisense.tv.hitvinput (HDMI, AV, tuner), com.mediatek.* (Live TV, inputs, remote keys, network)
+#   com.hisense.kpad (TV's own buttons), com.mstar.netflixobserver (remote's Netflix button)
+#   com.hisense.tv.customerlauncher, com.hisense.remoteupgrade (runs as Bluetooth; likely the remote)
+#   com.google.android.gms, com.android.vending, com.google.android.katniss (voice), keyboard, webview
+
+# == group1: telemetry
+com.hisense.app.logreport                     # Hisense usage logs
+com.google.android.feedback
+com.google.android.tv.bugreportsender
+
+# == group2: home-screen ads, shop demo, silent installs
+com.google.android.tvrecommendations          # feeds the stock home's recommendation rows
+com.google.android.leanbacklauncher.recommendations
+com.google.android.leanbacklauncher           # old home screen, not used on this firmware
+com.hisense.storemode                         # shop demo mode
+fusion.android.tv.demo                        # shop display demo
+com.mstar.android.tv.disclaimercustomization  # shop disclaimer screen
+android.autoinstalls.config.hisense.xiaoyushan  # installs partner apps without asking
+
+# == group3: preloads and background services
+com.seraphic.browser                          # vendor browser
+com.google.android.videos                     # Play Movies
+com.google.android.play.games
+com.google.android.apps.nbu.smartconnect.tv   # Data Saver: a VPN for phone hotspots, 67 MB always running
+com.hisense.tv.hisremotenow                   # RemoteNOW phone remote (Google's remote app keeps working)
+com.hisense.myapplication                     # Hisense screensaver, not the one in use
+com.iqqijni.tv.keyboard                       # spare Kika keyboard; Gboard stays the keyboard
+
+# == group4: home screen swap. tools/install-home.sh switches these off after the new home is running.
+#    Do not switch them off by hand first: Home would land on a factory test app, and with no screensaver
+#    this firmware sleeps after 5 idle minutes.
+com.google.android.tvlauncher                 # stock home: sponsored rows, 117 MB
+com.google.android.backdrop                   # Ambient Mode screensaver, 90 MB while showing
+
+# == group5: firmware updates (optional). The last firmware for this TV is from December 2021.
+#    An update can switch packages back on; tools/reapply.sh puts them back.
+com.hisense.tv.ota

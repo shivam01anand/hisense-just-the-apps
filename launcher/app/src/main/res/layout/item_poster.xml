@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One watchlist poster: 2:3, rounded, a white ring when focused, and a chip naming where it opens.
+     The title shows until the poster file is decoded, and stays for titles that have no poster. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="75dp"
+    android:layout_height="112dp"
+    android:layout_marginStart="6dp"
+    android:layout_marginEnd="6dp"
+    android:background="@drawable/poster_bg"
+    android:foreground="@drawable/poster_ring"
+    android:focusable="true"
+    android:clickable="true">
+
+    <TextView
+        android:id="@+id/posterTitle"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:padding="8dp"
+        android:maxLines="5"
+        android:ellipsize="end"
+        android:textColor="#D9FFFFFF"
+        android:textSize="11sp"
+        android:fontFamily="@font/outfit" />
+
+    <ImageView
+        android:id="@+id/posterImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/posterChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="5dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="1dp"
+        android:paddingBottom="1dp"
+        android:background="@drawable/chip_bg"
+        android:textColor="#FFFFFFFF"
+        android:textSize="7sp"
+        android:fontFamily="@font/outfit"
+        android:fontVariationSettings="'wght' 700"
+        android:letterSpacing="0.08"
+        android:singleLine="true" />
+</FrameLayout>

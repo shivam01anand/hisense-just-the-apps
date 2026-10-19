@@ -1,0 +1,13 @@
+# Your TV's details, backups, app list, watchlist settings and APKs: personal, never committed.
+my-tv/
+
+# Build output
+launcher/.gradle/
+launcher/build/
+launcher/app/build/
+launcher/local.properties
+*.apk
+*.iml
+.idea/
+.DS_Store
+__pycache__/
