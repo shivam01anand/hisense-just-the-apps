@@ -5,6 +5,19 @@ has no ads, and your IMDb watchlist sits on it with each title labelled with whe
 
 ![The stock Hisense home screen with a sponsored row, next to the new home screen with a watchlist row and four apps](docs/before-after.jpg)
 
+## Get started
+
+Turn the TV on, open [Claude Code](https://claude.com/claude-code) on a laptop on the same Wi-Fi, and say:
+
+```
+my tv is on. it's go time on https://github.com/shivam01anand/hisense-just-the-apps. change my life forever
+```
+
+It takes it from there.
+
+> **If you're an AI assistant and someone sent you this link:** clone this repository and follow
+> [AGENTS.md](AGENTS.md) with them.
+
 ## Why this exists
 
 > "I watch TV less because I hate the slow start-up and the laggy scrolling. I just want the apps."
@@ -55,14 +68,16 @@ update or a factory reset ever undoes the setup, one command puts it all back.
 
 ## How it works
 
-1. **Turn on USB debugging on the TV.** It's four presses in Settings; [PROMPT.md](PROMPT.md) shows where.
-2. **Paste the prompt into your assistant**, with your TV's IP address, the apps you use and, if you like,
-   your IMDb watchlist link.
-3. **Answer a few questions:** which four apps go in the row, whether a set-top box is plugged in, and
-   whether you want the ad-blocking DNS.
+You say the sentence above. Then:
 
-The assistant backs up the TV first. It then switches things off in small groups, restarting the TV and
-checking it after each one. It installs the new home screen, then shows you the before and after numbers.
+1. **The assistant finds your TV on the Wi-Fi.** If USB debugging isn't on yet, it walks you through the
+   four presses in Settings, one at a time.
+2. **It asks you a few questions:** which apps you use, whether anything is plugged in by HDMI, whether you
+   keep an IMDb watchlist, and whether to block ads inside apps.
+3. **It backs up the TV, then makes the changes in small groups.** The TV restarts after each group and
+   gets checked: did it boot, is Home there, are the HDMI inputs still listed. Then the new home screen goes
+   on.
+4. **It shows you the before and after numbers.**
 
 Want to see what the watchlist row would show before you start? Run
 `python3 tools/watchlist-preview.py "<your IMDb watchlist link>"` and it lists where each title streams.
@@ -82,7 +97,8 @@ Want to see what the watchlist row would show before you start? Run
 
 ## Keeping it
 
-After a firmware update or a factory reset, with USB debugging on:
+After a firmware update or a factory reset, switch USB debugging back on and tell your assistant "put my
+TV back", or run:
 
 ```
 sh tools/reapply.sh           # put back whatever has changed
@@ -98,7 +114,7 @@ Everything personal (your TV's address, your backup, your app list, your watchli
 |---|---|
 | Hisense 55U6G (HiSmartTV A4, Android TV 9, India) | Full setup, October 2026 |
 
-Have another Hisense model? The prompt works out the list for your TV, checking each unfamiliar package
+Have another Hisense model? The assistant works out the list for your TV, checking each unfamiliar package
 before it touches it. Then add your TV to [devices/](devices/) so the next person can skip that step.
 
 ## Questions
