@@ -85,18 +85,17 @@ final class Watchlist {
     }
 
     /**
-     * The groups row: "On your apps", "Recently added", "Top rated", then genres from largest to smallest. A genre
+     * The groups row: "Recently added", "Top rated", then genres from largest to smallest. Every app counts,
+     * Stremio included, so there is no "on your apps" split: the chip on each poster says where it opens. A genre
      * that covers most of the list (Drama, on many lists) narrows nothing, so it is left out, and so is any genre
      * with fewer than three titles.
      */
     static List<Group> groups(List<Item> items) {
         List<Group> out = new ArrayList<>();
         if (items.isEmpty()) return out;
-        List<Item> onApps = new ArrayList<>();
         List<Item> rated = new ArrayList<>();
         Map<String, List<Item>> byGenre = new HashMap<>();
         for (Item it : items) {
-            if (!STREMIO.equals(it.service)) onApps.add(it);
             if (it.rating > 0) rated.add(it);
             for (String g : it.genres) {
                 List<Item> l = byGenre.get(g);
@@ -104,7 +103,6 @@ final class Watchlist {
                 l.add(it);
             }
         }
-        if (!onApps.isEmpty()) out.add(new Group("On your apps", onApps));
         out.add(new Group("Recently added", items));
         // A fixed bar suits nobody (one list has 167 titles at 8.0+ and 15 at 8.5+), so "Top rated" is the
         // best-rated quarter of the list, between 10 and 40 titles, best first.

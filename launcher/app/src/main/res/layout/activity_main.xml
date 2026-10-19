@@ -188,8 +188,8 @@
             </LinearLayout>
         </RelativeLayout>
 
-        <!-- Watchlist (Watchlist, GroupAdapter, WatchAdapter): a row of groups ("On your apps", "Recently
-             added", genres). Moving onto it opens that group's posters underneath, with a line about what is
+        <!-- Watchlist (Watchlist, GroupAdapter, WatchAdapter): a row of groups ("Recently added", "Top rated",
+             genres). Moving onto it opens that group's posters underneath, with a line about what is
              focused; leaving it closes them. Their space stays reserved, so the dock never moves. Hidden until
              there is a saved list. -->
         <androidx.recyclerview.widget.RecyclerView

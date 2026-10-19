@@ -23,7 +23,8 @@ If `my-tv/` is gone, it's a fresh setup.
 - Keep everything about their TV in `my-tv/` (git ignores it).
 - Ask before anything that depends on how they use the TV. Switch nothing off without their OK on the list.
 - Never touch: `com.hisense.tv.smartsense`, `com.hisense.tv.smartservice`, `com.vt.tv.smartsense.ui` (this
-  family sent a Hisense into an Android Recovery loop), `com.hisense.tv.hitvinput`, any `com.mediatek.*`,
+  family sent a Hisense into an Android Recovery loop), `com.hisense.tv.hitvinput`, any `com.mediatek.*`
+  except `com.mediatek.androidbox` (Screen Sharing, a standalone mirroring receiver they may not use),
   `com.hisense.kpad`, `com.mstar.netflixobserver`, `com.hisense.tv.customerlauncher`,
   `com.hisense.remoteupgrade`, Play Services, Play Store, the keyboard, voice search, WebView.
 - Check each step on the real TV: `adb exec-out screencap -p` for screenshots, `uiautomator dump` when an app
@@ -99,8 +100,8 @@ Run `tools/backup.sh`. Change nothing until it has succeeded.
 
 - Write `my-tv/config.json`. Use `dock_apps` for their four most-used apps in the order they want, and
   `show_inputs_pill` true only if something is on HDMI. Set `show_network_pill` to false. If they gave an IMDb
-  link, run `tools/watchlist-preview.py "<link>"`, tell them what it found ("60 of your 239 titles are on
-  your apps"), and add `watchlist_imdb_user` and `watchlist_country`.
+  link, run `tools/watchlist-preview.py "<link>"`, tell them what it found ("of your 239 titles, 16 are
+  on Netflix, 21 on Prime Video and the rest open in Stremio"), and add `watchlist_imdb_user` and `watchlist_country`.
 - Install JDK 17 and the Android SDK if needed (see the top of `tools/install-home.sh`), then run
   `tools/install-home.sh`.
 - Then switch off the stock home screen and Ambient Mode, and any optional groups they agreed to. Press Home,

@@ -15,7 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The watchlist's groups row: "On your apps", "Recently added", genres. The selected one's posters show below. */
+/** The watchlist's groups row: "Recently added", "Top rated", genres. The selected one's posters show below. */
 final class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.Holder> {
 
     interface Listener {

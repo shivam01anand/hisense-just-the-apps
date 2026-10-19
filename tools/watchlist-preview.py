@@ -101,11 +101,11 @@ def main():
 
     counts = {}
     for p in places:
-        counts[p or "Stremio / none of your apps"] = counts.get(p or "Stremio / none of your apps", 0) + 1
+        counts[p or "Stremio (or nowhere, without it)"] = counts.get(p or "Stremio (or nowhere, without it)", 0) + 1
     print()
     for label, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print("  %-28s %d" % (label, n))
-    print("\nNewest additions you can watch now:")
+    print("\nNewest additions on your streaming apps:")
     shown = 0
     for item, p in zip(items, places):
         if p and shown < 15:

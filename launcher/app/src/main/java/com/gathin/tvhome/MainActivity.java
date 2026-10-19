@@ -921,11 +921,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         detailsCredits.setVisibility(it.directors.isEmpty() ? View.GONE : View.VISIBLE);
         detailsPlot.setText(it.plot != null ? it.plot : "");
         detailsPlot.setVisibility(it.plot != null && !it.plot.isEmpty() ? View.VISIBLE : View.GONE);
-        boolean onApps = !Watchlist.STREMIO.equals(it.service);
         // SonyLIV only takes a link that starts playback (Watchlist.offerIntent), so say so.
-        String verb = "SonyLIV".equals(it.service) ? "Plays in " : "Opens in ";
-        detailsWhere.setText(onApps ? verb + it.service : "Not on your apps  ·  opens in Stremio");
-        detailsWhere.setTextColor(onApps ? lighten(WatchAdapter.colorFor(it.service)) : 0x99FFFFFF);
+        detailsWhere.setText(("SonyLIV".equals(it.service) ? "Plays in " : "Opens in ") + it.service);
+        detailsWhere.setTextColor(lighten(WatchAdapter.colorFor(it.service)));
 
         Rect poster = new Rect(0, 0, vh.itemView.getWidth(), vh.itemView.getHeight());
         root.offsetDescendantRectToMyCoords(vh.itemView, poster);
@@ -996,26 +994,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         }
     }
 
-    /** "51 titles  ·  12 on your apps"; for "On your apps" itself, how many are on each service. */
+    /** "51 titles  ·  Netflix 9  ·  Prime Video 3  ·  Stremio 39": every app counts, largest first. */
     private CharSequence groupSummary(Watchlist.Group g) {
         Map<String, Integer> byService = new LinkedHashMap<>();
-        int onApps = 0;
         for (Watchlist.Item it : g.items) {
-            if (Watchlist.STREMIO.equals(it.service)) continue;
-            onApps++;
             Integer n = byService.get(it.service);
             byService.put(it.service, n == null ? 1 : n + 1);
         }
-        StringBuilder text = new StringBuilder();
-        if (onApps == g.items.size()) {
-            for (Map.Entry<String, Integer> e : byService.entrySet()) {
-                if (text.length() > 0) text.append("  ·  ");
-                text.append(e.getValue()).append(" on ").append(e.getKey());
-            }
-        } else {
-            text.append(g.items.size()).append(g.items.size() == 1 ? " title" : " titles");
-            if (onApps > 0) text.append("  ·  ").append(onApps).append(" on your apps");
-        }
+        List<Map.Entry<String, Integer>> counts = new ArrayList<>(byService.entrySet());
+        Collections.sort(counts, (a, b) -> b.getValue() - a.getValue());
+        StringBuilder text = new StringBuilder().append(g.items.size()).append(g.items.size() == 1 ? " title" : " titles");
+        for (Map.Entry<String, Integer> e : counts) text.append("  ·  ").append(e.getKey()).append(' ').append(e.getValue());
         SpannableString s = new SpannableString(text);
         s.setSpan(new ForegroundColorSpan(0x99FFFFFF), 0, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         return s;

@@ -7,7 +7,8 @@
 # Never switch these off (details in NOTES.md):
 #   com.hisense.tv.smartsense, com.hisense.tv.smartservice, com.vt.tv.smartsense.ui
 #     (switching this family off sent a Hisense FFM into an Android Recovery loop)
-#   com.hisense.tv.hitvinput (HDMI, AV, tuner), com.mediatek.* (Live TV, inputs, remote keys, network)
+#   com.hisense.tv.hitvinput (HDMI, AV, tuner), com.mediatek.* (Live TV, inputs, remote keys, network),
+#     except com.mediatek.androidbox in group6, which is only the Screen Sharing receiver
 #   com.hisense.kpad (TV's own buttons), com.mstar.netflixobserver (remote's Netflix button)
 #   com.hisense.tv.customerlauncher, com.hisense.remoteupgrade (runs as Bluetooth; likely the remote)
 #   com.google.android.gms, com.android.vending, com.google.android.katniss (voice), keyboard, webview
@@ -44,3 +45,8 @@ com.google.android.backdrop                   # Ambient Mode screensaver, 90 MB 
 # == group5: firmware updates (optional). The last firmware for this TV is from December 2021.
 #    An update can switch packages back on; tools/reapply.sh puts them back.
 com.hisense.tv.ota
+
+# == group6: optional, ask first. Each is a standalone app; tested switched off with a restart, 20 Oct 2026.
+com.mediatek.androidbox                       # Screen Sharing (Miracast receiver: mirroring from Android/Windows)
+com.jamdeo.tv.mediacenter                     # Media: plays files from a USB stick
+com.google.android.youtube.tvmusic            # YouTube Music
