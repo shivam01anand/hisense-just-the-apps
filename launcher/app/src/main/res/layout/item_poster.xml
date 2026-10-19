@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One watchlist poster: 2:3, rounded, a white ring when focused, a chip naming where it opens and IMDb's
-     rating in the corner. The title shows until the poster file is decoded, and stays when there is none. -->
+<!-- One watchlist poster: 2:3, rounded, a white ring when focused, and IMDb's rating in the corner. Which
+     app it opens in is deliberately not shown: pressing OK just opens it wherever it streams. The title shows until the poster file is decoded, and stays when there is none. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="69dp"
     android:layout_height="104dp"
@@ -30,23 +30,6 @@
         android:scaleType="centerCrop"
         android:contentDescription="@null" />
 
-    <TextView
-        android:id="@+id/posterChip"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_margin="5dp"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
-        android:paddingTop="1dp"
-        android:paddingBottom="1dp"
-        android:background="@drawable/chip_bg"
-        android:textColor="#FFFFFFFF"
-        android:textSize="7sp"
-        android:fontFamily="@font/outfit"
-        android:fontVariationSettings="'wght' 700"
-        android:letterSpacing="0.08"
-        android:singleLine="true" />
 
     <TextView
         android:id="@+id/posterRating"

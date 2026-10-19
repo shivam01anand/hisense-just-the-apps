@@ -1,7 +1,7 @@
 # Just the apps
 
 **Your Hisense Android TV, minus everything that isn't your apps.** It moves without stutter, the home screen
-has no ads, and your IMDb watchlist sits on it with each title labelled with where you can watch it.
+has no ads, and your IMDb watchlist sits on it by genre. Pick something and it opens, whichever app has it.
 
 ![The stock Hisense home screen with a sponsored row, next to the new home screen with a watchlist row and four apps](docs/before-after.jpg)
 
@@ -36,13 +36,14 @@ in a grid below. There are no sponsored rows, tabs or recommendations from apps 
 the slowest frames from 65 ms to 18 ms. We pressed the same keys before and after and read the TV's own
 frame stats.
 
-**Your watchlist, with where to watch it.** Your IMDb watchlist sits above your apps as a row of groups:
-Recently added, Top rated, then genres like Thriller or Comedy. Move onto a group and its
-posters open underneath, each tagged NETFLIX, PRIME, HOTSTAR, STREMIO and so on, with the IMDb rating in the corner.
-Move along the groups and the posters change with you. Rest on a poster for a moment and a card opens with
-the year, running time, country, director and plot. Press OK and that title's page opens inside the app,
-ready to play, on Netflix, Prime Video, Hotstar, Apple TV, SonyLIV or Zee5. Everything else opens in
-Stremio, if you use it.
+**Your watchlist, by genre.** Your IMDb watchlist sits above your apps as a row of genres, after Recently
+added and Top rated. Move onto Thriller and your thrillers open underneath, best rated first, with the IMDb
+rating in each poster's corner. Move along the row and the posters change with you. Rest on a poster for a
+moment and a card opens with the year, running time, country, director and plot.
+
+**You never think about which app.** Press OK and the title opens on its own page, in whichever of your apps
+has it: Netflix, Prime Video, Hotstar, Apple TV, SonyLIV or Zee5, and Stremio for everything else. The home
+screen works out where each title streams in your country and keeps that up to date.
 
 **Less running behind your back.** About twenty packages are switched off: Hisense and Google usage
 reporting, the shop demo, the partner app installer, Data Saver (67 MB, always running), a spare keyboard,

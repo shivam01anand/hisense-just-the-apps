@@ -66,10 +66,8 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -118,7 +116,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     /** Resting on a poster this long opens its details. */
     private static final long DETAILS_DELAY_MS = 1800;
     private View watchDetails;
-    private TextView detailsTitle, detailsMeta, detailsCredits, detailsPlot, detailsWhere;
+    private TextView detailsTitle, detailsMeta, detailsCredits, detailsPlot;
     private Watchlist.Item detailsItem;
     private final Runnable showDetails = this::showDetailsNow;
     /** Delayed after Home appears, so a refresh never competes with an app being opened straight away. */
@@ -267,7 +265,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         detailsMeta = findViewById(R.id.detailsMeta);
         detailsCredits = findViewById(R.id.detailsCredits);
         detailsPlot = findViewById(R.id.detailsPlot);
-        detailsWhere = findViewById(R.id.detailsWhere);
         watchRow = findViewById(R.id.watchRow);
         watchRow.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         watchRow.setItemAnimator(null);
@@ -875,7 +872,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         quietShelf();
         setWatchOpen(true);
         showGroup(position);
-        watchInfo.setText(groupSummary(groups.get(position)));
+        watchInfo.setText("");   // the chip already says how many; the posters do the talking
     }
 
     @Override
@@ -904,7 +901,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         hideGlass();
         setWatchOpen(true);
         watchInfo.setText(posterSummary(item));
-        watchGlow(WatchAdapter.colorFor(item.service));
+        watchGlow(watchAdapter.posterColor(item.imdb));
         detailsItem = item;
         handler.removeCallbacks(showDetails);
         handler.postDelayed(showDetails, DETAILS_DELAY_MS);
@@ -921,9 +918,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         detailsCredits.setVisibility(it.directors.isEmpty() ? View.GONE : View.VISIBLE);
         detailsPlot.setText(it.plot != null ? it.plot : "");
         detailsPlot.setVisibility(it.plot != null && !it.plot.isEmpty() ? View.VISIBLE : View.GONE);
-        // SonyLIV only takes a link that starts playback (Watchlist.offerIntent), so say so.
-        detailsWhere.setText(("SonyLIV".equals(it.service) ? "Plays in " : "Opens in ") + it.service);
-        detailsWhere.setTextColor(lighten(WatchAdapter.colorFor(it.service)));
 
         Rect poster = new Rect(0, 0, vh.itemView.getWidth(), vh.itemView.getHeight());
         root.offsetDescendantRectToMyCoords(vh.itemView, poster);
@@ -965,11 +959,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         return TextUtils.join("  ·  ", parts);
     }
 
-    /** A service's colour, lifted so it reads as text on the dark card. */
-    private static int lighten(int color) {
-        int r = (color >> 16) & 0xFF, g = (color >> 8) & 0xFF, b = color & 0xFF;
-        return 0xFF000000 | ((r + (255 - r) / 3) << 16) | ((g + (255 - g) / 3) << 8) | (b + (255 - b) / 3);
-    }
 
     @Override
     public void onPosterClicked(Watchlist.Item item) {
@@ -994,28 +983,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         }
     }
 
-    /** "51 titles  ·  Netflix 9  ·  Prime Video 3  ·  Stremio 39": every app counts, largest first. */
-    private CharSequence groupSummary(Watchlist.Group g) {
-        Map<String, Integer> byService = new LinkedHashMap<>();
-        for (Watchlist.Item it : g.items) {
-            Integer n = byService.get(it.service);
-            byService.put(it.service, n == null ? 1 : n + 1);
-        }
-        List<Map.Entry<String, Integer>> counts = new ArrayList<>(byService.entrySet());
-        Collections.sort(counts, (a, b) -> b.getValue() - a.getValue());
-        StringBuilder text = new StringBuilder().append(g.items.size()).append(g.items.size() == 1 ? " title" : " titles");
-        for (Map.Entry<String, Integer> e : counts) text.append("  ·  ").append(e.getKey()).append(' ').append(e.getValue());
-        SpannableString s = new SpannableString(text);
-        s.setSpan(new ForegroundColorSpan(0x99FFFFFF), 0, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        return s;
-    }
 
-    /** "Frida    2024  ·  IMDb 7.5  ·  Prime Video  ·  Documentary, Animation", the details dimmed. */
+    /** "Frida    2024  ·  IMDb 7.5  ·  Documentary, Animation", the details dimmed. No app: OK just opens it. */
     private CharSequence posterSummary(Watchlist.Item it) {
         StringBuilder meta = new StringBuilder();
         if (it.year > 0) meta.append(it.year);
         if (it.rating > 0) meta.append(meta.length() > 0 ? "  ·  " : "").append(String.format(Locale.ROOT, "IMDb %.1f", it.rating));
-        meta.append(meta.length() > 0 ? "  ·  " : "").append(it.service);
         if (!it.genres.isEmpty()) meta.append("  ·  ").append(TextUtils.join(", ", it.genres.subList(0, Math.min(2, it.genres.size()))));
         SpannableString s = new SpannableString(it.title + "    " + meta);
         s.setSpan(new ForegroundColorSpan(0x99FFFFFF), it.title.length(), s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -1029,7 +1002,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         ambient.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
     }
 
-    /** On a poster: no shelf, but the glow in the colour of the service it opens in. */
+    /** On a poster: no shelf, but a glow in the poster's own colour. */
     private void watchGlow(int color) {
         heroShown = false;
         heroName.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();

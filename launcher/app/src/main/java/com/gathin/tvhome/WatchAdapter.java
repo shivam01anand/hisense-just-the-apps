@@ -1,7 +1,6 @@
 package com.gathin.tvhome;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Handler;
@@ -26,7 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Posters for the watchlist row, each with a small chip naming where it opens. Posters are decoded off the
+ * Posters for the watchlist row, with IMDb's rating in the corner. Posters are decoded off the
  * main thread from the files {@link Watchlist} saved, at RGB_565, into a small memory cache, so scrolling the
  * row never waits on the disk and a long list does not hold every bitmap.
  */
@@ -78,7 +77,32 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
         return items.size();
     }
 
-    /** The service's own colour, for the chip and the ambient glow while its poster is focused. */
+    /**
+     * The poster's average colour, livened up, for the glow behind the row while it is focused; a soft grey
+     * until the poster has loaded. The glow follows the film, not the app it happens to be on.
+     */
+    int posterColor(String imdb) {
+        Bitmap b = cache.get(imdb);
+        if (b == null) return 0xFF6E6E78;
+        Bitmap small = Bitmap.createScaledBitmap(b, 8, 12, true);
+        long r = 0, g = 0, bl = 0;
+        int n = small.getWidth() * small.getHeight();
+        for (int y = 0; y < small.getHeight(); y++) {
+            for (int x = 0; x < small.getWidth(); x++) {
+                int c = small.getPixel(x, y);
+                r += (c >> 16) & 0xFF;
+                g += (c >> 8) & 0xFF;
+                bl += c & 0xFF;
+            }
+        }
+        float[] hsv = new float[3];
+        android.graphics.Color.RGBToHSV((int) (r / n), (int) (g / n), (int) (bl / n), hsv);
+        hsv[1] = Math.min(1f, hsv[1] * 1.4f + 0.1f);
+        hsv[2] = Math.max(hsv[2], 0.55f);
+        return android.graphics.Color.HSVToColor(hsv);
+    }
+
+    /** The service's own colour. Unused on screen now; kept for anyone who wants app labels back. */
     static int colorFor(String service) {
         switch (service) {
             case "Netflix":
@@ -98,9 +122,6 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
         }
     }
 
-    private static String chipFor(String service) {
-        return "Prime Video".equals(service) ? "PRIME" : service.toUpperCase(java.util.Locale.ROOT);
-    }
 
     @NonNull
     @Override
@@ -113,8 +134,6 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
     public void onBindViewHolder(@NonNull Holder h, int position) {
         Watchlist.Item it = items.get(position);
         h.title.setText(it.title);
-        h.chip.setText(chipFor(it.service));
-        h.chip.setBackgroundTintList(ColorStateList.valueOf(colorFor(it.service)));
         h.rating.setText(it.rating > 0 ? String.format(java.util.Locale.ROOT, "★ %.1f", it.rating) : "");
         h.rating.setVisibility(it.rating > 0 ? View.VISIBLE : View.GONE);
         h.image.setTag(it.imdb);
@@ -147,14 +166,12 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
     final class Holder extends RecyclerView.ViewHolder {
         final ImageView image;
         final TextView title;
-        final TextView chip;
         final TextView rating;
 
         Holder(View v) {
             super(v);
             image = v.findViewById(R.id.posterImage);
             title = v.findViewById(R.id.posterTitle);
-            chip = v.findViewById(R.id.posterChip);
             rating = v.findViewById(R.id.posterRating);
             v.setClipToOutline(true);   // rounded corners from poster_bg
 

@@ -114,9 +114,14 @@ final class Watchlist {
         List<Map.Entry<String, List<Item>>> genres = new ArrayList<>(byGenre.entrySet());
         Collections.sort(genres, (a, b) -> b.getValue().size() != a.getValue().size()
                 ? b.getValue().size() - a.getValue().size() : a.getKey().compareTo(b.getKey()));
+        // Inside a genre, best rated first: picking a genre means "show me the good ones". Recently added stays
+        // in the order the titles were added.
         for (Map.Entry<String, List<Item>> e : genres) {
             int n = e.getValue().size();
-            if (n >= 3 && n * 4 <= items.size() * 3) out.add(new Group(e.getKey(), e.getValue()));
+            if (n < 3 || n * 4 > items.size() * 3) continue;
+            List<Item> byRating = new ArrayList<>(e.getValue());
+            Collections.sort(byRating, (a, b) -> Double.compare(b.rating, a.rating));
+            out.add(new Group(e.getKey(), byRating));
         }
         return out;
     }
