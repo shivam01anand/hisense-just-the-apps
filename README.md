@@ -1,7 +1,8 @@
 # Just the apps
 
 **Your Hisense Android TV, minus everything that isn't your apps.** It moves without stutter, the home screen
-has no ads, and your IMDb watchlist sits on it by genre. Pick something and it opens, whichever app has it.
+has no ads, and it opens on something worth watching: new Hindi picks (or your language), this year's best,
+and your IMDb watchlist by genre. Pick a poster and it plays, whichever app has it.
 
 ![The stock Hisense home screen with a sponsored row, next to the new home screen with a watchlist row and four apps](docs/before-after.jpg)
 
@@ -36,10 +37,15 @@ in a grid below. There are no sponsored rows, tabs or recommendations from apps 
 the slowest frames from 65 ms to 18 ms. We pressed the same keys before and after and read the TV's own
 frame stats.
 
-**Your watchlist, by genre.** Your IMDb watchlist sits above your apps as a row of genres, after Recently
-added and Top rated. Move onto Thriller and your thrillers open underneath, best rated first, with the IMDb
-rating in each poster's corner. Move along the row and the posters change with you. Rest on a poster for a
-moment and a card opens with the year, running time, country, director and plot.
+**Something to watch, the moment Home opens.** A row of chips sits above your apps, and the first one is
+already open: new, well-liked Hindi films and shows (pick any language). Then come **Continue** for what you
+opened last, **Recently added** to your IMDb watchlist, **2026** for this year's most popular and **Best of
+2026** for its highest rated, and your watchlist's genres, best rated first. Posters are big enough to read
+from the sofa, with the IMDb rating in the corner. Rest on one for a moment and a card opens with the year,
+running time, country, director and plot.
+
+**Finding it again is easy.** Open a title and it goes to the front of Continue, so tomorrow it's one press
+away. Press Back from the app and you land on the poster you left.
 
 **You never think about which app.** Press OK and the title opens on its own page, in whichever of your apps
 has it: Netflix, Prime Video, Hotstar, Apple TV, SonyLIV or Zee5, and Stremio for everything else. The home

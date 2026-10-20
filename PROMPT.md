@@ -18,6 +18,7 @@ Other assistants that can run commands on your laptop work too. Give them the sa
 my tv is on. it's go time on https://github.com/shivam01anand/hisense-just-the-apps. change my life forever.
 The apps I use: Netflix, YouTube, Prime Video, Hotstar.
 Nothing is plugged in by HDMI.
+My mother watches mostly in Hindi.
 My IMDb watchlist: https://www.imdb.com/user/p.xxxxxxxx/watchlist/
 Yes to blocking ads in apps.
 ```
