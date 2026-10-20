@@ -972,13 +972,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         root.offsetDescendantRectToMyCoords(watchRow, row);
         float width = 440 * density, margin = 40 * density;
         float x = Math.max(margin, Math.min(poster.left - 8 * density, root.getWidth() - width - margin));
+        // The card's layout top is 0, so its translation is its position: slide it the last few pixels down
+        // to just under the posters (animating translationY to 0 would send it to the top of the screen).
+        float y = row.bottom - 6 * density;
         watchDetails.setX(x);
-        watchDetails.setY(row.bottom - 6 * density);
         watchDetails.animate().cancel();
         watchDetails.setVisibility(View.VISIBLE);
         watchDetails.setAlpha(0f);
-        watchDetails.setTranslationY(-6 * density);
-        watchDetails.animate().alpha(1f).translationY(0f).setDuration(reducedMotion ? 90 : 200).start();
+        watchDetails.setTranslationY(y - 6 * density);
+        watchDetails.animate().alpha(1f).translationY(y).setDuration(reducedMotion ? 90 : 200).start();
         watchInfo.animate().alpha(0f).setDuration(120).start();   // the card says it all
     }
 
