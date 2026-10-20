@@ -298,6 +298,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
             int want = Math.max(0, h - dockRow - gridRows - (int) (bottom * density));
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
+                // A new padding leaves laid-out rows where they were (the layout keeps its anchor), so when the
+                // chips appear the dock would sit under the posters until the next move. Park it again, unless
+                // focus is down in the app grid.
+                if (!(grid.hasFocus() && lastFocused >= COLUMNS)) {
+                    grid.post(() -> {
+                        grid.scrollToPosition(0);
+                        if (grid.hasFocus()) grid.post(() -> focusTile(lastFocused));   // move the glass with it
+                    });
+                }
             }
         });
 
