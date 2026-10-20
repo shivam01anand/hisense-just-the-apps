@@ -345,8 +345,10 @@ final class Watchlist {
         String types = "titleTypeConstraint: {anyTitleTypeIds: [\"movie\", \"tvSeries\", \"tvMiniSeries\"]}";
         for (String lang : cfg.watchlistLanguages) {
             // New and well liked: from the start of last year, 7+ with enough votes to mean it, most popular first.
+            // Only titles streaming on an installed app: this chip is for whoever just wants to press OK and
+            // watch, so a film still in cinemas has no place in it. Twice as many are fetched to fill it.
             String label = new java.util.Locale(lang).getDisplayLanguage(java.util.Locale.ENGLISH);
-            cols.add(collection(placer, label, true, "releaseDateConstraint: {releaseDateRange: {start: \"" + (year - 1)
+            cols.add(collection(placer, label, true, COLLECTION_SIZE * 2, true, "releaseDateConstraint: {releaseDateRange: {start: \"" + (year - 1)
                     + "-01-01\", end: \"" + year + "-12-31\"}}, " + types
                     + ", userRatingsConstraint: {aggregateRatingRange: {min: 7}, ratingsCountRange: {min: 1000}}"
                     + ", languageConstraint: {anyPrimaryLanguages: [\"" + lang + "\"]}", "POPULARITY", "ASC"));
@@ -355,9 +357,9 @@ final class Watchlist {
             String thisYear = "releaseDateConstraint: {releaseDateRange: {start: \"" + year + "-01-01\", end: \"" + year
                     + "-12-31\"}}, " + types;
             // This year's most popular, minus the ones people didn't like; and the best of the year with real votes.
-            cols.add(collection(placer, String.valueOf(year), false, thisYear
+            cols.add(collection(placer, String.valueOf(year), false, COLLECTION_SIZE, false, thisYear
                     + ", userRatingsConstraint: {aggregateRatingRange: {min: 6.5}, ratingsCountRange: {min: 5000}}", "POPULARITY", "ASC"));
-            cols.add(collection(placer, "Best of " + year, false, thisYear
+            cols.add(collection(placer, "Best of " + year, false, COLLECTION_SIZE, false, thisYear
                     + ", userRatingsConstraint: {ratingsCountRange: {min: 20000}}", "USER_RATING", "DESC"));
         }
 
@@ -369,12 +371,22 @@ final class Watchlist {
         return new Data(watchlist, cols, loadItems(c, "history.json"));
     }
 
-    /** One collection; a failed search leaves it empty rather than failing the whole refresh. */
-    private static Collection collection(Placer placer, String label, boolean lead, String constraints, String sortBy, String order) {
+    /**
+     * One collection; a failed search leaves it empty rather than failing the whole refresh. With streamingOnly,
+     * titles that would fall back to Stremio are left out, and the first COLLECTION_SIZE that stream are kept.
+     */
+    private static Collection collection(Placer placer, String label, boolean lead, int fetch, boolean streamingOnly,
+                                         String constraints, String sortBy, String order) {
         List<Item> items = new ArrayList<>();
         try {
-            items = fetchSearch(constraints, sortBy, order);
-            for (Item it : items) placer.place(it);
+            for (Item it : fetchSearch(constraints, sortBy, order, fetch)) {
+                if (items.size() >= COLLECTION_SIZE) break;
+                if (streamingOnly) placer.placeOnly(it);
+                else placer.place(it);
+                if (streamingOnly && STREMIO.equals(it.service)) continue;
+                if (streamingOnly) fetchPoster(placer.c, it);
+                items.add(it);
+            }
         } catch (IOException | JSONException e) {
             Log.w(TAG, "collection " + label + " failed", e);
         }
@@ -401,6 +413,12 @@ final class Watchlist {
         }
 
         void place(Item it) {
+            placeOnly(it);
+            fetchPoster(c, it);
+        }
+
+        /** Works out where the title opens without downloading its poster (it may yet be left out). */
+        void placeOnly(Item it) {
             Item known = done.get(it.imdb);
             if (known != null) {
                 copyPlace(known, it);
@@ -422,7 +440,6 @@ final class Watchlist {
                     it.checked = old != null ? old.checked : 0;
                 }
             }
-            fetchPoster(c, it);
             done.put(it.imdb, it);
         }
 
@@ -475,8 +492,8 @@ final class Watchlist {
     }
 
     /** IMDb's advanced search, as on imdb.com/search/title. */
-    private static List<Item> fetchSearch(String constraints, String sortBy, String order) throws IOException, JSONException {
-        String q = "query { advancedTitleSearch(first: " + COLLECTION_SIZE + ", constraints: { " + constraints + " },"
+    private static List<Item> fetchSearch(String constraints, String sortBy, String order, int first) throws IOException, JSONException {
+        String q = "query { advancedTitleSearch(first: " + first + ", constraints: { " + constraints + " },"
                 + " sort: {sortBy: " + sortBy + ", sortOrder: " + order + "}) { edges { node { title { " + TITLE_FIELDS
                 + " } } } } }";
         JSONArray edges = imdb(q).getJSONObject("data").getJSONObject("advancedTitleSearch").getJSONArray("edges");

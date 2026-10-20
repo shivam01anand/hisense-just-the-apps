@@ -38,7 +38,8 @@ the slowest frames from 65 ms to 18 ms. We pressed the same keys before and afte
 frame stats.
 
 **Something to watch, the moment Home opens.** A row of chips sits above your apps, and the first one is
-already open: new, well-liked Hindi films and shows (pick any language). Then come **Continue** for what you
+already open: new, well-liked Hindi films and shows that are streaming on your apps right now, so every one
+plays (pick any language). Then come **Continue** for what you
 opened last, **Recently added** to your IMDb watchlist, **2026** for this year's most popular and **Best of
 2026** for its highest rated, and your watchlist's genres, best rated first. Posters are big enough to read
 from the sofa, with the IMDb rating in the corner. Rest on one for a moment and a card opens with the year,
