@@ -54,8 +54,12 @@ final class Watchlist {
     /** Re-checks per refresh, so a refresh after the first one stays a handful of requests. */
     private static final int MAX_RECHECKS = 25;
     /** Bumped when the saved list gains fields; an older list is refreshed on the next Home.
-     *  2: genres, rating. 3: runtime, countries, plot, directors, votes. */
-    private static final int DATA_VERSION = 3;
+     *  2: genres, rating. 3: runtime, countries, plot, directors, votes. 4: 300 px posters, collections. */
+    private static final int DATA_VERSION = 4;
+    /** Titles per collection (Hindi, this year, best of this year). */
+    private static final int COLLECTION_SIZE = 30;
+    /** Titles kept in Continue. */
+    private static final int HISTORY_SIZE = 15;
 
     static final String STREMIO = "Stremio";
 
@@ -84,41 +88,61 @@ final class Watchlist {
         }
     }
 
+    /** A list from beyond the watchlist: new great titles in a language, or this year's popular and best. */
+    static final class Collection {
+        final String label;
+        /** Language collections go first on the row; the first chip is the one open when Home appears. */
+        final boolean lead;
+        final List<Item> items;
+
+        Collection(String label, boolean lead, List<Item> items) {
+            this.label = label;
+            this.lead = lead;
+            this.items = items;
+        }
+    }
+
+    /** Everything the row is built from: the watchlist, the collections, and what was opened from Home. */
+    static final class Data {
+        final List<Item> watchlist;
+        final List<Collection> collections;
+        final List<Item> history;
+
+        Data(List<Item> watchlist, List<Collection> collections, List<Item> history) {
+            this.watchlist = watchlist;
+            this.collections = collections;
+            this.history = history;
+        }
+    }
+
     /**
-     * The groups row: "Recently added", "Top rated", then genres from largest to smallest. Every app counts,
-     * Stremio included, so there is no "on your apps" split: the chip on each poster says where it opens. A genre
-     * that covers most of the list (Drama, on many lists) narrows nothing, so it is left out, and so is any genre
+     * The groups row, for someone who thinks in moods and genres, not apps: language collections first (the
+     * first chip is open when Home appears), Continue (what you opened from Home, newest first), Recently added
+     * to the watchlist, this year's popular and best, then the watchlist's genres, best rated first. A genre that
+     * covers most of the watchlist (Drama, on many lists) narrows nothing, so it is left out, and so is any genre
      * with fewer than three titles.
      */
-    static List<Group> groups(List<Item> items) {
+    static List<Group> groups(Data d) {
         List<Group> out = new ArrayList<>();
-        if (items.isEmpty()) return out;
-        List<Item> rated = new ArrayList<>();
+        for (Collection c : d.collections) if (c.lead && !c.items.isEmpty()) out.add(new Group(c.label, c.items));
+        if (!d.history.isEmpty()) out.add(new Group("Continue", d.history));
+        if (!d.watchlist.isEmpty()) out.add(new Group("Recently added", d.watchlist));
+        for (Collection c : d.collections) if (!c.lead && !c.items.isEmpty()) out.add(new Group(c.label, c.items));
         Map<String, List<Item>> byGenre = new HashMap<>();
-        for (Item it : items) {
-            if (it.rating > 0) rated.add(it);
+        for (Item it : d.watchlist) {
             for (String g : it.genres) {
                 List<Item> l = byGenre.get(g);
                 if (l == null) byGenre.put(g, l = new ArrayList<>());
                 l.add(it);
             }
         }
-        out.add(new Group("Recently added", items));
-        // A fixed bar suits nobody (one list has 167 titles at 8.0+ and 15 at 8.5+), so "Top rated" is the
-        // best-rated quarter of the list, between 10 and 40 titles, best first.
-        if (rated.size() >= 12) {
-            Collections.sort(rated, (a, b) -> Double.compare(b.rating, a.rating));
-            int n = Math.min(40, Math.max(10, items.size() / 4));
-            out.add(new Group("Top rated", new ArrayList<>(rated.subList(0, Math.min(n, rated.size())))));
-        }
         List<Map.Entry<String, List<Item>>> genres = new ArrayList<>(byGenre.entrySet());
         Collections.sort(genres, (a, b) -> b.getValue().size() != a.getValue().size()
                 ? b.getValue().size() - a.getValue().size() : a.getKey().compareTo(b.getKey()));
-        // Inside a genre, best rated first: picking a genre means "show me the good ones". Recently added stays
-        // in the order the titles were added.
+        // Inside a genre, best rated first: picking a genre means "show me the good ones".
         for (Map.Entry<String, List<Item>> e : genres) {
             int n = e.getValue().size();
-            if (n < 3 || n * 4 > items.size() * 3) continue;
+            if (n < 3 || n * 4 > d.watchlist.size() * 3) continue;
             List<Item> byRating = new ArrayList<>(e.getValue());
             Collections.sort(byRating, (a, b) -> Double.compare(b.rating, a.rating));
             out.add(new Group(e.getKey(), byRating));
@@ -138,7 +162,7 @@ final class Watchlist {
     }
 
     interface Listener {
-        void onWatchlist(List<Item> items);
+        void onWatchlist(Data data);
     }
 
     private static final AtomicBoolean running = new AtomicBoolean(false);
@@ -146,9 +170,10 @@ final class Watchlist {
     private Watchlist() {
     }
 
-    /** The IMDb user, country and services come from config.xml, overlaid by config.json (see Config). */
+    /** The row shows when there is an IMDb user or any collection (config.xml, overlaid by config.json). */
     static boolean enabled(Context c) {
-        return !Config.load(c).watchlistImdbUser.isEmpty();
+        Config cfg = Config.load(c);
+        return !cfg.watchlistImdbUser.isEmpty() || !cfg.watchlistLanguages.isEmpty() || cfg.watchlistThisYear;
     }
 
     // ---- saved list ------------------------------------------------------------------------------
@@ -161,41 +186,82 @@ final class Watchlist {
     }
 
     static File poster(Context c, String imdb) {
-        return new File(new File(dir(c), "posters"), imdb + ".jpg");
+        return new File(new File(dir(c), "posters300"), imdb + ".jpg");
     }
 
-    static List<Item> load(Context c) {
-        List<Item> out = new ArrayList<>();
-        File f = new File(dir(c), "items.json");
-        if (!f.exists()) return out;
-        try (InputStream in = new FileInputStream(f)) {
-            JSONArray a = new JSONArray(new String(readAll(in), StandardCharsets.UTF_8));
-            for (int i = 0; i < a.length(); i++) {
+    /** The saved watchlist, collections and history; empty lists when there are none yet. */
+    static Data load(Context c) {
+        List<Collection> cols = new ArrayList<>();
+        try {
+            JSONArray a = readJson(new File(dir(c), "collections.json"));
+            for (int i = 0; a != null && i < a.length(); i++) {
                 JSONObject o = a.getJSONObject(i);
-                Item it = new Item();
-                it.imdb = o.getString("imdb");
-                it.title = o.optString("title");
-                it.type = o.optString("type");
-                it.year = o.optInt("year");
-                it.posterUrl = o.optString("poster", null);
-                it.service = o.optString("service", STREMIO);
-                it.pkg = o.optString("pkg", null);
-                it.intentUri = o.optString("intent", null);
-                it.checked = o.optLong("checked");
-                it.rating = o.optDouble("rating", 0);
-                it.votes = o.optInt("votes");
-                it.runtimeMin = o.optInt("runtime");
-                it.plot = o.optString("plot", null);
-                strings(o.optJSONArray("genres"), it.genres);
-                strings(o.optJSONArray("countries"), it.countries);
-                strings(o.optJSONArray("directors"), it.directors);
-                out.add(it);
+                cols.add(new Collection(o.getString("label"), o.optBoolean("lead"), items(o.optJSONArray("items"))));
             }
         } catch (Exception e) {
-            Log.w(TAG, "saved watchlist unreadable, starting over", e);
-            out.clear();
+            Log.w(TAG, "saved collections unreadable", e);
+            cols.clear();
         }
+        return new Data(loadItems(c, "items.json"), cols, loadItems(c, "history.json"));
+    }
+
+    private static List<Item> loadItems(Context c, String name) {
+        try {
+            return items(readJson(new File(dir(c), name)));
+        } catch (Exception e) {
+            Log.w(TAG, name + " unreadable, starting over", e);
+            return new ArrayList<>();
+        }
+    }
+
+    private static JSONArray readJson(File f) throws IOException, JSONException {
+        if (!f.exists()) return null;
+        try (InputStream in = new FileInputStream(f)) {
+            return new JSONArray(new String(readAll(in), StandardCharsets.UTF_8));
+        }
+    }
+
+    private static List<Item> items(JSONArray a) throws JSONException {
+        List<Item> out = new ArrayList<>();
+        for (int i = 0; a != null && i < a.length(); i++) out.add(fromJson(a.getJSONObject(i)));
         return out;
+    }
+
+    private static Item fromJson(JSONObject o) throws JSONException {
+        Item it = new Item();
+        it.imdb = o.getString("imdb");
+        it.title = o.optString("title");
+        it.type = o.optString("type");
+        it.year = o.optInt("year");
+        it.posterUrl = o.optString("poster", null);
+        it.service = o.optString("service", STREMIO);
+        it.pkg = o.optString("pkg", null);
+        it.intentUri = o.optString("intent", null);
+        it.checked = o.optLong("checked");
+        it.rating = o.optDouble("rating", 0);
+        it.votes = o.optInt("votes");
+        it.runtimeMin = o.optInt("runtime");
+        it.plot = o.optString("plot", null);
+        strings(o.optJSONArray("genres"), it.genres);
+        strings(o.optJSONArray("countries"), it.countries);
+        strings(o.optJSONArray("directors"), it.directors);
+        return it;
+    }
+
+    private static JSONObject toJson(Item it) throws JSONException {
+        return new JSONObject()
+                .put("imdb", it.imdb).put("title", it.title).put("type", it.type).put("year", it.year)
+                .put("poster", it.posterUrl).put("service", it.service).put("pkg", it.pkg)
+                .put("intent", it.intentUri).put("checked", it.checked)
+                .put("rating", it.rating).put("votes", it.votes).put("runtime", it.runtimeMin).put("plot", it.plot)
+                .put("genres", new JSONArray(it.genres)).put("countries", new JSONArray(it.countries))
+                .put("directors", new JSONArray(it.directors));
+    }
+
+    private static JSONArray toJson(List<Item> items) throws JSONException {
+        JSONArray a = new JSONArray();
+        for (Item it : items) a.put(toJson(it));
+        return a;
     }
 
     private static void strings(JSONArray a, List<String> into) {
@@ -205,22 +271,28 @@ final class Watchlist {
         }
     }
 
-    private static void save(Context c, List<Item> items) throws IOException, JSONException {
-        JSONArray a = new JSONArray();
-        for (Item it : items) {
-            a.put(new JSONObject()
-                    .put("imdb", it.imdb).put("title", it.title).put("type", it.type).put("year", it.year)
-                    .put("poster", it.posterUrl).put("service", it.service).put("pkg", it.pkg)
-                    .put("intent", it.intentUri).put("checked", it.checked)
-                    .put("rating", it.rating).put("votes", it.votes).put("runtime", it.runtimeMin).put("plot", it.plot)
-                    .put("genres", new JSONArray(it.genres)).put("countries", new JSONArray(it.countries))
-                    .put("directors", new JSONArray(it.directors)));
-        }
-        File tmp = new File(dir(c), "items.json.tmp");
+    private static void write(Context c, String name, JSONArray a) throws IOException {
+        File tmp = new File(dir(c), name + ".tmp");
         try (OutputStream out = new FileOutputStream(tmp)) {
             out.write(a.toString().getBytes(StandardCharsets.UTF_8));
         }
-        if (!tmp.renameTo(new File(dir(c), "items.json"))) throw new IOException("rename failed");
+        if (!tmp.renameTo(new File(dir(c), name))) throw new IOException("rename failed");
+    }
+
+    /**
+     * Puts a title at the front of Continue. A small file on the TV and no network: the app it opens in keeps
+     * the position, so finding it again is all Continue has to do.
+     */
+    static void remember(Context c, Item item) {
+        try {
+            List<Item> h = loadItems(c, "history.json");
+            for (int i = h.size() - 1; i >= 0; i--) if (h.get(i).imdb.equals(item.imdb)) h.remove(i);
+            h.add(0, item);
+            while (h.size() > HISTORY_SIZE) h.remove(h.size() - 1);
+            write(c, "history.json", toJson(h));
+        } catch (Exception e) {
+            Log.w(TAG, "could not save Continue", e);
+        }
     }
 
     // ---- refresh ---------------------------------------------------------------------------------
@@ -239,9 +311,9 @@ final class Watchlist {
         new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
-                List<Item> items = refresh(c, prefs);
+                Data data = refresh(c, prefs);
                 prefs.edit().putLong("ok", System.currentTimeMillis()).putInt("version", DATA_VERSION).apply();
-                new Handler(Looper.getMainLooper()).post(() -> listener.onWatchlist(items));
+                new Handler(Looper.getMainLooper()).post(() -> listener.onWatchlist(data));
             } catch (Exception | OutOfMemoryError e) {
                 Log.w(TAG, "refresh failed, keeping the saved list", e);
             } finally {
@@ -250,28 +322,94 @@ final class Watchlist {
         }, "watchlist").start();
     }
 
-    private static List<Item> refresh(Context c, SharedPreferences prefs) throws IOException, JSONException {
+    private static Data refresh(Context c, SharedPreferences prefs) throws IOException, JSONException {
+        Data before = load(c);
         Map<String, Item> saved = new HashMap<>();
-        for (Item it : load(c)) saved.put(it.imdb, it);
+        for (Collection col : before.collections) for (Item it : col.items) saved.put(it.imdb, it);
+        for (Item it : before.watchlist) saved.put(it.imdb, it);
         Config cfg = Config.load(c);
         List<Service> services = installedServices(c, cfg.watchlistServices);
         // A service added (an app installed, or the list changed) can hold any title: look every one up again.
         StringBuilder sig = new StringBuilder();
         for (Service sv : services) sig.append(sv.tech).append(',');
         boolean servicesChanged = !sig.toString().equals(prefs.getString("services", ""));
-        String country = cfg.watchlistCountry;
-        long now = System.currentTimeMillis();
-        int rechecks = 0;
+        // The 200 px posters from before version 4 are too soft at the new size.
+        deleteTree(new File(dir(c), "posters"));
 
-        List<Item> items = fetchImdbWatchlist(cfg.watchlistImdbUser);
-        for (Item it : items) {
+        Placer placer = new Placer(c, saved, services, cfg.watchlistCountry, servicesChanged);
+        List<Item> watchlist = cfg.watchlistImdbUser.isEmpty() ? new ArrayList<>() : fetchImdbWatchlist(cfg.watchlistImdbUser);
+        for (Item it : watchlist) placer.place(it);
+
+        List<Collection> cols = new ArrayList<>();
+        int year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR);
+        String types = "titleTypeConstraint: {anyTitleTypeIds: [\"movie\", \"tvSeries\", \"tvMiniSeries\"]}";
+        for (String lang : cfg.watchlistLanguages) {
+            // New and well liked: from the start of last year, 7+ with enough votes to mean it, most popular first.
+            String label = new java.util.Locale(lang).getDisplayLanguage(java.util.Locale.ENGLISH);
+            cols.add(collection(placer, label, true, "releaseDateConstraint: {releaseDateRange: {start: \"" + (year - 1)
+                    + "-01-01\", end: \"" + year + "-12-31\"}}, " + types
+                    + ", userRatingsConstraint: {aggregateRatingRange: {min: 7}, ratingsCountRange: {min: 1000}}"
+                    + ", languageConstraint: {anyPrimaryLanguages: [\"" + lang + "\"]}", "POPULARITY", "ASC"));
+        }
+        if (cfg.watchlistThisYear) {
+            String thisYear = "releaseDateConstraint: {releaseDateRange: {start: \"" + year + "-01-01\", end: \"" + year
+                    + "-12-31\"}}, " + types;
+            // This year's most popular, minus the ones people didn't like; and the best of the year with real votes.
+            cols.add(collection(placer, String.valueOf(year), false, thisYear
+                    + ", userRatingsConstraint: {aggregateRatingRange: {min: 6.5}, ratingsCountRange: {min: 5000}}", "POPULARITY", "ASC"));
+            cols.add(collection(placer, "Best of " + year, false, thisYear
+                    + ", userRatingsConstraint: {ratingsCountRange: {min: 20000}}", "USER_RATING", "DESC"));
+        }
+
+        write(c, "items.json", toJson(watchlist));
+        JSONArray a = new JSONArray();
+        for (Collection col : cols) a.put(new JSONObject().put("label", col.label).put("lead", col.lead).put("items", toJson(col.items)));
+        write(c, "collections.json", a);
+        prefs.edit().putString("services", sig.toString()).apply();
+        return new Data(watchlist, cols, loadItems(c, "history.json"));
+    }
+
+    /** One collection; a failed search leaves it empty rather than failing the whole refresh. */
+    private static Collection collection(Placer placer, String label, boolean lead, String constraints, String sortBy, String order) {
+        List<Item> items = new ArrayList<>();
+        try {
+            items = fetchSearch(constraints, sortBy, order);
+            for (Item it : items) placer.place(it);
+        } catch (IOException | JSONException e) {
+            Log.w(TAG, "collection " + label + " failed", e);
+        }
+        return new Collection(label, lead, items);
+    }
+
+    /** Where each title opens, shared by the watchlist and the collections so no title is looked up twice. */
+    private static final class Placer {
+        final Context c;
+        final Map<String, Item> saved;
+        final Map<String, Item> done = new HashMap<>();
+        final List<Service> services;
+        final String country;
+        final boolean servicesChanged;
+        final long now = System.currentTimeMillis();
+        int rechecks;
+
+        Placer(Context c, Map<String, Item> saved, List<Service> services, String country, boolean servicesChanged) {
+            this.c = c;
+            this.saved = saved;
+            this.services = services;
+            this.country = country;
+            this.servicesChanged = servicesChanged;
+        }
+
+        void place(Item it) {
+            Item known = done.get(it.imdb);
+            if (known != null) {
+                copyPlace(known, it);
+                return;
+            }
             Item old = saved.get(it.imdb);
             boolean stale = old == null || servicesChanged || now - old.checked > RECHECK_MS;
             if (old != null && (!stale || (!servicesChanged && rechecks >= MAX_RECHECKS))) {
-                it.service = old.service;
-                it.pkg = old.pkg;
-                it.intentUri = old.intentUri;
-                it.checked = old.checked;
+                copyPlace(old, it);
             } else {
                 if (old != null) rechecks++;
                 try {
@@ -279,21 +417,28 @@ final class Watchlist {
                     it.checked = now;
                 } catch (IOException | JSONException e) {
                     // JustWatch hiccup: keep what we knew, try this title again next time.
-                    if (old != null) {
-                        it.service = old.service;
-                        it.pkg = old.pkg;
-                        it.intentUri = old.intentUri;
-                    } else {
-                        it.service = STREMIO;
-                    }
+                    if (old != null) copyPlace(old, it);
+                    else it.service = STREMIO;
                     it.checked = old != null ? old.checked : 0;
                 }
             }
             fetchPoster(c, it);
+            done.put(it.imdb, it);
         }
-        save(c, items);
-        prefs.edit().putString("services", sig.toString()).apply();
-        return items;
+
+        private static void copyPlace(Item from, Item to) {
+            to.service = from.service;
+            to.pkg = from.pkg;
+            to.intentUri = from.intentUri;
+            to.checked = from.checked;
+        }
+    }
+
+    private static void deleteTree(File f) {
+        File[] kids = f.listFiles();
+        if (kids != null) for (File k : kids) deleteTree(k);
+        //noinspection ResultOfMethodCallIgnored
+        f.delete();
     }
 
     /** The configured services, in order of preference, whose app is installed and enabled. */
@@ -309,62 +454,87 @@ final class Watchlist {
         return out;
     }
 
+    /** The fields the row, the info line and the details card use, for one IMDb title. */
+    private static final String TITLE_FIELDS = "id titleText { text } releaseYear { year } titleType { id } primaryImage { url }"
+            + " ratingsSummary { aggregateRating voteCount } titleGenres { genres { genre { text } } }"
+            + " runtime { seconds } countriesOfOrigin { countries { text } } plot { plotText { plainText } }"
+            + " directors: credits(first: 2, filter: {categories: [\"director\"]}) { edges { node { name { nameText { text } } } } }";
+
     private static List<Item> fetchImdbWatchlist(String user) throws IOException, JSONException {
         String q = "query { predefinedList(classType: WATCH_LIST, userId: \"" + user + "\") {"
                 + " items(first: 250, sort: {by: CREATED_DATE, order: DESC}) { edges { node { listItem {"
-                + " ... on Title { id titleText { text } releaseYear { year } titleType { id } primaryImage { url }"
-                + " ratingsSummary { aggregateRating voteCount } titleGenres { genres { genre { text } } }"
-                + " runtime { seconds } countriesOfOrigin { countries { text } } plot { plotText { plainText } }"
-                + " directors: credits(first: 2, filter: {categories: [\"director\"]}) { edges { node { name { nameText { text } } } } } }"
-                + " } } } } } }";
-        JSONObject d = post("https://caching.graphql.imdb.com/", new JSONObject().put("query", q),
-                "x-imdb-client-name", "imdb-web-next-localized");
+                + " ... on Title { " + TITLE_FIELDS + " } } } } } } }";
+        JSONObject d = imdb(q);
         JSONArray edges = d.getJSONObject("data").getJSONObject("predefinedList").getJSONObject("items").getJSONArray("edges");
         List<Item> out = new ArrayList<>();
         for (int i = 0; i < edges.length(); i++) {
-            JSONObject t = edges.getJSONObject(i).getJSONObject("node").optJSONObject("listItem");
-            if (t == null || !t.has("id")) continue;   // a list entry that is not a title (person, image)
-            Item it = new Item();
-            it.imdb = t.getString("id");
-            it.title = t.getJSONObject("titleText").getString("text");
-            JSONObject year = t.optJSONObject("releaseYear");
-            it.year = year != null ? year.optInt("year") : 0;
-            JSONObject type = t.optJSONObject("titleType");
-            it.type = type != null ? type.optString("id") : "movie";
-            JSONObject img = t.optJSONObject("primaryImage");
-            // IMDb's image server scales on request: 200 px wide is about 16 KB instead of a 2000 px original.
-            it.posterUrl = img != null ? img.getString("url").replaceFirst("\\._V1_.*\\.jpg$", "._V1_UX200_.jpg") : null;
-            JSONObject ratings = t.optJSONObject("ratingsSummary");
-            it.rating = ratings != null ? ratings.optDouble("aggregateRating", 0) : 0;
-            if (Double.isNaN(it.rating)) it.rating = 0;
-            it.votes = ratings != null ? ratings.optInt("voteCount") : 0;
-            JSONObject runtime = t.optJSONObject("runtime");
-            it.runtimeMin = runtime != null ? runtime.optInt("seconds") / 60 : 0;
-            JSONObject plot = t.optJSONObject("plot");
-            JSONObject plotText = plot != null ? plot.optJSONObject("plotText") : null;
-            it.plot = plotText != null && !plotText.isNull("plainText") ? plotText.optString("plainText") : null;
-            JSONObject coo = t.optJSONObject("countriesOfOrigin");
-            JSONArray cs = coo != null ? coo.optJSONArray("countries") : null;
-            for (int k = 0; cs != null && k < cs.length(); k++) {
-                String v = cs.getJSONObject(k).optString("text");
-                if (!v.isEmpty()) it.countries.add(v);
-            }
-            JSONObject dirs = t.optJSONObject("directors");
-            JSONArray ds = dirs != null ? dirs.optJSONArray("edges") : null;
-            for (int k = 0; ds != null && k < ds.length(); k++) {
-                JSONObject name = ds.getJSONObject(k).getJSONObject("node").optJSONObject("name");
-                JSONObject nt = name != null ? name.optJSONObject("nameText") : null;
-                if (nt != null && !nt.optString("text").isEmpty()) it.directors.add(nt.optString("text"));
-            }
-            JSONObject tg = t.optJSONObject("titleGenres");
-            JSONArray gs = tg != null ? tg.optJSONArray("genres") : null;
-            for (int k = 0; gs != null && k < gs.length(); k++) {
-                JSONObject g = gs.getJSONObject(k).optJSONObject("genre");
-                if (g != null && !g.optString("text").isEmpty()) it.genres.add(g.optString("text"));
-            }
-            out.add(it);
+            Item it = parseTitle(edges.getJSONObject(i).getJSONObject("node").optJSONObject("listItem"));
+            if (it != null) out.add(it);   // a list entry that is not a title (person, image) is skipped
         }
         return out;
+    }
+
+    /** IMDb's advanced search, as on imdb.com/search/title. */
+    private static List<Item> fetchSearch(String constraints, String sortBy, String order) throws IOException, JSONException {
+        String q = "query { advancedTitleSearch(first: " + COLLECTION_SIZE + ", constraints: { " + constraints + " },"
+                + " sort: {sortBy: " + sortBy + ", sortOrder: " + order + "}) { edges { node { title { " + TITLE_FIELDS
+                + " } } } } }";
+        JSONArray edges = imdb(q).getJSONObject("data").getJSONObject("advancedTitleSearch").getJSONArray("edges");
+        List<Item> out = new ArrayList<>();
+        for (int i = 0; i < edges.length(); i++) {
+            Item it = parseTitle(edges.getJSONObject(i).getJSONObject("node").optJSONObject("title"));
+            if (it != null) out.add(it);
+        }
+        return out;
+    }
+
+    private static JSONObject imdb(String query) throws IOException, JSONException {
+        return post("https://caching.graphql.imdb.com/", new JSONObject().put("query", query),
+                "x-imdb-client-name", "imdb-web-next-localized");
+    }
+
+    private static Item parseTitle(JSONObject t) throws JSONException {
+        if (t == null || !t.has("id")) return null;
+        Item it = new Item();
+        it.imdb = t.getString("id");
+        it.title = t.getJSONObject("titleText").getString("text");
+        JSONObject year = t.optJSONObject("releaseYear");
+        it.year = year != null ? year.optInt("year") : 0;
+        JSONObject type = t.optJSONObject("titleType");
+        it.type = type != null ? type.optString("id") : "movie";
+        JSONObject img = t.optJSONObject("primaryImage");
+        // IMDb's image server scales on request: 300 px wide (about 30 KB) is sharp at the poster's size on a
+        // 1080p screen, instead of a 2000 px original.
+        it.posterUrl = img != null ? img.getString("url").replaceFirst("\\._V1_.*\\.jpg$", "._V1_UX300_.jpg") : null;
+        JSONObject ratings = t.optJSONObject("ratingsSummary");
+        it.rating = ratings != null ? ratings.optDouble("aggregateRating", 0) : 0;
+        if (Double.isNaN(it.rating)) it.rating = 0;
+        it.votes = ratings != null ? ratings.optInt("voteCount") : 0;
+        JSONObject runtime = t.optJSONObject("runtime");
+        it.runtimeMin = runtime != null ? runtime.optInt("seconds") / 60 : 0;
+        JSONObject plot = t.optJSONObject("plot");
+        JSONObject plotText = plot != null ? plot.optJSONObject("plotText") : null;
+        it.plot = plotText != null && !plotText.isNull("plainText") ? plotText.optString("plainText") : null;
+        JSONObject coo = t.optJSONObject("countriesOfOrigin");
+        JSONArray cs = coo != null ? coo.optJSONArray("countries") : null;
+        for (int k = 0; cs != null && k < cs.length(); k++) {
+            String v = cs.getJSONObject(k).optString("text");
+            if (!v.isEmpty()) it.countries.add(v);
+        }
+        JSONObject dirs = t.optJSONObject("directors");
+        JSONArray ds = dirs != null ? dirs.optJSONArray("edges") : null;
+        for (int k = 0; ds != null && k < ds.length(); k++) {
+            JSONObject name = ds.getJSONObject(k).getJSONObject("node").optJSONObject("name");
+            JSONObject nt = name != null ? name.optJSONObject("nameText") : null;
+            if (nt != null && !nt.optString("text").isEmpty()) it.directors.add(nt.optString("text"));
+        }
+        JSONObject tg = t.optJSONObject("titleGenres");
+        JSONArray gs = tg != null ? tg.optJSONArray("genres") : null;
+        for (int k = 0; gs != null && k < gs.length(); k++) {
+            JSONObject g = gs.getJSONObject(k).optJSONObject("genre");
+            if (g != null && !g.optString("text").isEmpty()) it.genres.add(g.optString("text"));
+        }
+        return it;
     }
 
     private static final String JW_QUERY = "query S($country: Country!, $q: String!) {"

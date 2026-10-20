@@ -1,8 +1,5 @@
 package com.gathin.tvhome;
 
-import android.text.SpannableString;
-import android.text.Spanned;
-import android.text.style.RelativeSizeSpan;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -60,12 +57,7 @@ final class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.Holder> {
 
     @Override
     public void onBindViewHolder(@NonNull Holder h, int position) {
-        Watchlist.Group g = groups.get(position);
-        // "Thriller 51": the count a step smaller, in the same colour so it inverts with the chip on focus.
-        String count = String.valueOf(g.items.size());
-        SpannableString text = new SpannableString(g.label + "  " + count);
-        text.setSpan(new RelativeSizeSpan(0.8f), text.length() - count.length(), text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        h.chip.setText(text);
+        h.chip.setText(groups.get(position).label);   // no counts: nobody picks a genre by how many it has
         h.chip.setSelected(position == selected);
     }
 

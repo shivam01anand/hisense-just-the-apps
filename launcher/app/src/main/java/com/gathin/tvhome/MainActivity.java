@@ -108,8 +108,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     /** The group whose posters are in the row, and whether the row is open (focus on a chip or a poster). */
     private int shownGroup = -1;
     private boolean watchOpen;
+    private View watchPanel;
+    private Watchlist.Data data;
+    /** Continue gained a title while an app was open: rebuild the chips when Home comes back. */
+    private boolean historyChanged;
+    /** Index of the group in the row; groups are remembered by label, as Continue can appear and shift them. */
+    private int lastGroup = 0;
+    private static String lastGroupLabel;
+    /** Home was just pressed (or the launcher just started): open the first chip, Hindi for this household. */
+    private static boolean homeFresh = true;
     /** Last focused group and poster, and whether one of them had focus when Home was left. */
-    private static int lastGroup = 0;
     private static int lastPoster = 0;
     private static boolean lastOnGroup;
     private static boolean lastOnWatch;
@@ -265,7 +273,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         detailsMeta = findViewById(R.id.detailsMeta);
         detailsCredits = findViewById(R.id.detailsCredits);
         detailsPlot = findViewById(R.id.detailsPlot);
+        watchPanel = findViewById(R.id.watchPanel);
         watchRow = findViewById(R.id.watchRow);
+        // The posters open over the app row, starting right under the chips.
+        watchGroups.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeWatchPanel());
         watchRow.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         watchRow.setItemAnimator(null);
         watchAdapter = new WatchAdapter(this, this, reducedMotion);
@@ -424,6 +435,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
+        homeFresh = true;
         grid.scrollToPosition(0);
         lastFocused = 0;
         lastOnWatch = false;
@@ -443,6 +455,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         }
         tilesReady = false;
         promptsPaused = false;
+        if (historyChanged) {
+            historyChanged = false;
+            showWatchlist(data);
+        }
         reloadApps(true);
         updateGreeting();
         updateWifiLabel();
@@ -506,7 +522,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         final String returnKey = lastFocusedKey;
         final int returnSlot = lastFocused;
         grid.post(() -> {
-            if (lastOnWatch && watchShown()) {
+            if (homeFresh && watchShown()) {
+                // Fresh Home: the first chip, already open. Back from an app keeps where you were instead.
+                homeFresh = false;
+                lastGroupLabel = groups.get(0).label;
+                focusGroup(0);
+            } else if (lastOnWatch && watchShown()) {
                 focusPoster(lastPoster);
             } else if (lastOnGroup && watchShown()) {
                 focusGroup(lastGroup);
@@ -765,23 +786,40 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
 
     // ---- watchlist --------------------------------------------------------------------------------
 
-    private void showWatchlist(List<Watchlist.Item> items) {
+    private void showWatchlist(Watchlist.Data d) {
+        data = d;
         boolean hadFocus = watchGroups.hasFocus() || watchRow.hasFocus();
         int keepPoster = lastPoster;
-        groups = Watchlist.groups(items);
+        groups = Watchlist.groups(d);
         groupAdapter.setGroups(groups);
         boolean any = !groups.isEmpty();
         watchGroups.setVisibility(any ? View.VISIBLE : View.GONE);
-        // Closed, the posters and the info line stay INVISIBLE: their space is kept, so the dock never moves.
-        int closed = any ? View.INVISIBLE : View.GONE;
-        watchRow.setVisibility(any && watchOpen ? View.VISIBLE : closed);
-        watchInfo.setVisibility(any && watchOpen ? View.VISIBLE : closed);
-        if (!any) return;
-        lastGroup = Math.min(lastGroup, groups.size() - 1);
+        if (!any) {
+            setWatchOpen(false);
+            return;
+        }
+        lastGroup = 0;
+        for (int i = 0; i < groups.size(); i++) if (groups.get(i).label.equals(lastGroupLabel)) lastGroup = i;
         shownGroup = -1;
         showGroup(lastGroup);
-        lastPoster = Math.min(keepPoster, watchAdapter.getItemCount() - 1);
+        // Continue just put the opened title first, so its old position would point at a different one.
+        boolean continueMoved = "Continue".equals(lastGroupLabel);
+        lastPoster = continueMoved ? 0 : Math.min(keepPoster, watchAdapter.getItemCount() - 1);
         if (hadFocus) focusGroup(lastGroup);
+    }
+
+    /**
+     * Puts the posters right under the chips. A top margin, not a translation: offsetDescendantRectToMyCoords
+     * ignores translations, and the details card is placed with it.
+     */
+    private void placeWatchPanel() {
+        Rect r = new Rect(0, 0, watchGroups.getWidth(), watchGroups.getHeight());
+        root.offsetDescendantRectToMyCoords(watchGroups, r);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) watchPanel.getLayoutParams();
+        if (lp.topMargin != r.bottom) {
+            lp.topMargin = r.bottom;
+            watchPanel.setLayoutParams(lp);
+        }
     }
 
     private boolean watchShown() {
@@ -798,20 +836,26 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         lastPoster = 0;
     }
 
+    /**
+     * Opens or closes the posters. They cover the app row while open, so the row fades back (one hardware layer,
+     * cheap on this GPU) and returns when focus goes back down to it.
+     */
     private void setWatchOpen(boolean open) {
-        if (open == watchOpen || groups.isEmpty()) return;
+        if (open == watchOpen || (open && groups.isEmpty())) return;
         watchOpen = open;
-        for (View v : new View[]{watchRow, watchInfo}) {
-            v.animate().cancel();
-            if (open) {
-                v.setVisibility(View.VISIBLE);
-                v.setAlpha(0f);
-                v.animate().alpha(1f).setDuration(reducedMotion ? 80 : 180).start();
-            } else {
-                v.animate().alpha(0f).setDuration(reducedMotion ? 60 : 140).withEndAction(() -> {
-                    if (!watchOpen) v.setVisibility(View.INVISIBLE);
-                }).start();
-            }
+        int in = reducedMotion ? 80 : 180, out = reducedMotion ? 60 : 140;
+        watchPanel.animate().cancel();
+        grid.animate().cancel();
+        if (open) {
+            placeWatchPanel();
+            watchPanel.setVisibility(View.VISIBLE);
+            watchPanel.animate().alpha(1f).setDuration(in).start();
+            grid.animate().alpha(0f).setDuration(in).withLayer().start();
+        } else {
+            watchPanel.animate().alpha(0f).setDuration(out).withEndAction(() -> {
+                if (!watchOpen) watchPanel.setVisibility(View.INVISIBLE);
+            }).start();
+            grid.animate().alpha(1f).setDuration(in).withLayer().start();
         }
     }
 
@@ -866,6 +910,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     @Override
     public void onGroupFocused(int position) {
         lastGroup = position;
+        lastGroupLabel = groups.get(position).label;
         lastOnGroup = true;
         lastOnWatch = false;
         hideGlass();
@@ -962,6 +1007,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
 
     @Override
     public void onPosterClicked(Watchlist.Item item) {
+        // Into Continue first (a small file, no network), so it is there to find when Home comes back.
+        Watchlist.remember(this, item);
+        if (data != null) {
+            List<Watchlist.Item> h = new ArrayList<>(data.history);
+            for (int i = h.size() - 1; i >= 0; i--) if (h.get(i).imdb.equals(item.imdb)) h.remove(i);
+            h.add(0, item);
+            data = new Watchlist.Data(data.watchlist, data.collections, h);
+            historyChanged = true;
+        }
         Watchlist.open(this, item);
     }
 

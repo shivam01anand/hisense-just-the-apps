@@ -40,7 +40,7 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
         boolean onPosterKey(int position, int keyCode);
     }
 
-    static final float FOCUS_SCALE = 1.10f;
+    static final float FOCUS_SCALE = 1.06f;   // big posters need only a nudge
 
     private final Context context;
     private final Listener listener;
@@ -48,8 +48,8 @@ final class WatchAdapter extends RecyclerView.Adapter<WatchAdapter.Holder> {
     private final List<Watchlist.Item> items = new ArrayList<>();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService decoder = Executors.newSingleThreadExecutor();
-    /** About 70 posters at 200×296 RGB_565; the row shows eleven at a time. */
-    private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(8 * 1024 * 1024) {
+    /** About 60 posters at 300×444 RGB_565; the row shows five or six at a time. */
+    private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(16 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
             return value.getByteCount();

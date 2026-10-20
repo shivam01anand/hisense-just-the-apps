@@ -59,6 +59,10 @@ final class Config {
     final String watchlistImdbUser;
     final String watchlistCountry;
     final List<String> watchlistServices;
+    /** Language codes ("hi") that each get a chip of new, well-liked titles; the first is open on Home. */
+    final List<String> watchlistLanguages;
+    /** This year's popular and best-rated titles as two chips. */
+    final boolean watchlistThisYear;
 
     private Config(List<String> dockApps, List<String> hiddenApps, String liveTvPackage, String liveTvAction,
                    String sourcePanelService, String sourcePanelAction, String inputAction,
@@ -67,7 +71,8 @@ final class Config {
                    boolean showHomeSettingsShortcut, int backgroundColor,
                    File wallpaper, boolean overlayApplied,
                    boolean showInputsPill, boolean showNetworkPill,
-                   String watchlistImdbUser, String watchlistCountry, List<String> watchlistServices) {
+                   String watchlistImdbUser, String watchlistCountry, List<String> watchlistServices,
+                   List<String> watchlistLanguages, boolean watchlistThisYear) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
         this.liveTvPackage = liveTvPackage;
@@ -90,6 +95,8 @@ final class Config {
         this.watchlistImdbUser = watchlistImdbUser;
         this.watchlistCountry = watchlistCountry;
         this.watchlistServices = Collections.unmodifiableList(watchlistServices);
+        this.watchlistLanguages = Collections.unmodifiableList(watchlistLanguages);
+        this.watchlistThisYear = watchlistThisYear;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -120,6 +127,8 @@ final class Config {
         String imdbUser = res.getString(R.string.watchlist_imdb_user).trim();
         String country = res.getString(R.string.watchlist_country).trim();
         List<String> services = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.watchlist_services)));
+        List<String> languages = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.watchlist_languages)));
+        boolean thisYear = res.getBoolean(R.bool.watchlist_this_year);
 
         File dir = dir(ctx);
         File file = dir != null ? new File(dir, FILE_NAME) : null;
@@ -146,6 +155,8 @@ final class Config {
             imdbUser = string(json, "watchlist_imdb_user", imdbUser);
             country = string(json, "watchlist_country", country);
             services = stringList(json, "watchlist_services", services);
+            languages = stringList(json, "watchlist_languages", languages);
+            thisYear = bool(json, "watchlist_this_year", thisYear);
         }
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
         if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
@@ -155,7 +166,7 @@ final class Config {
         return new Config(dock, hidden, liveTv, liveTvAction, panelService, panelAction, inputAction,
                 Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, reducedMotion,
                 vpn, homeSettings, background, wallpaper, applied,
-                inputsPill, networkPill, imdbUser, country, services);
+                inputsPill, networkPill, imdbUser, country, services, languages, thisYear);
     }
 
     /** Reads and parses the overlay; any problem means "no overlay", never a crash on the home screen. */

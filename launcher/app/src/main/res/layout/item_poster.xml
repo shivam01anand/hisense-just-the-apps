@@ -2,10 +2,10 @@
 <!-- One watchlist poster: 2:3, rounded, a white ring when focused, and IMDb's rating in the corner. Which
      app it opens in is deliberately not shown: pressing OK just opens it wherever it streams. The title shows until the poster file is decoded, and stays when there is none. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="69dp"
-    android:layout_height="104dp"
-    android:layout_marginStart="6dp"
-    android:layout_marginEnd="6dp"
+    android:layout_width="138dp"
+    android:layout_height="207dp"
+    android:layout_marginStart="8dp"
+    android:layout_marginEnd="8dp"
     android:background="@drawable/poster_bg"
     android:foreground="@drawable/poster_ring"
     android:focusable="true"
@@ -16,11 +16,11 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:padding="8dp"
-        android:maxLines="5"
+        android:padding="12dp"
+        android:maxLines="6"
         android:ellipsize="end"
         android:textColor="#D9FFFFFF"
-        android:textSize="11sp"
+        android:textSize="14sp"
         android:fontFamily="@font/outfit" />
 
     <ImageView
@@ -36,12 +36,14 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_margin="4dp"
-        android:paddingStart="3dp"
-        android:paddingEnd="3dp"
+        android:layout_margin="6dp"
+        android:paddingStart="5dp"
+        android:paddingEnd="5dp"
+        android:paddingTop="1dp"
+        android:paddingBottom="1dp"
         android:background="@drawable/rating_bg"
         android:textColor="#D9FFFFFF"
-        android:textSize="7sp"
+        android:textSize="10sp"
         android:fontFamily="@font/outfit"
         android:fontVariationSettings="'wght' 600"
         android:singleLine="true" />

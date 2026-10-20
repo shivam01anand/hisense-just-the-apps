@@ -86,6 +86,12 @@
          none of them opens in Stremio when it is installed. -->
     <string name="watchlist_imdb_user" translatable="false"></string>
     <string name="watchlist_country" translatable="false">IN</string>
+    <!-- Collections beyond the watchlist. watchlist_languages: language codes (e.g. hi, ta, ml) that each get a
+         chip of new, well-liked titles in that language, placed first; the first chip is open when Home appears.
+         watchlist_this_year: this year's most popular, and best rated, as two chips. -->
+    <string-array name="watchlist_languages"></string-array>
+    <bool name="watchlist_this_year">true</bool>
+
     <string-array name="watchlist_services">
         <item>netflix|Netflix|com.netflix.ninja</item>
         <item>amazonprimevideo|Prime Video|com.amazon.amazonvideo.livingroom</item>
