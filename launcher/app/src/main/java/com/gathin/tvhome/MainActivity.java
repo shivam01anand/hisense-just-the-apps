@@ -293,7 +293,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
             int itemH = AppAdapter.itemHeightPx(AppAdapter.tileHeightPx(AppAdapter.tileWidthPx(inner, COLUMNS, density)), density);
             int dockRow = itemH + (int) ((6 + 12) * density);   // item height plus DockDecoration offsets
             int gridRows = itemH * rowsBelowDock;
-            int want = Math.max(0, h - dockRow - gridRows - (int) (30 * density));
+            // With the watchlist showing, the dock sits a little lower to leave the posters their room.
+            int bottom = watchShown() ? 18 : 30;
+            int want = Math.max(0, h - dockRow - gridRows - (int) (bottom * density));
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
             }
@@ -377,8 +379,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
             boolean onTile = newF != null && newF.getId() == R.id.card;
             if (!onTile) hideGlass();
-            // The posters stay open while focus is on a chip or a poster, and close when it leaves both.
-            if (newF != null && !inside(watchGroups, newF) && !inside(watchRow, newF)) setWatchOpen(false);
             // Details belong to one poster: any focus move closes them (a new poster starts its own wait).
             hideDetails();
         });
@@ -581,6 +581,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     public void onTileFocused(int position, View card) {
         lastOnWatch = false;
         lastOnGroup = false;
+        if (!groups.isEmpty()) setWatchOpen(position < COLUMNS);
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
@@ -636,6 +637,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     // ---- top shelf -------------------------------------------------------------------------------
 
     private void showHero(int position, float dockTopInRoot) {
+        if (watchShown()) {
+            // The posters sit where the app's big name would go, and the logos say it anyway: glow only.
+            watchGlow(adapter.ambientColorAt(position));
+            return;
+        }
         showShelf(adapter.labelAt(position), adapter.ambientColorAt(position), dockTopInRoot);
     }
 
@@ -743,7 +749,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (position < COLUMNS) {
                 if (!watchShown()) return false;           // dock row: let focus move to the top bar
-                focusGroup(lastGroup);                     // dock row: up to the watchlist groups
+                focusPoster(lastPoster);                   // dock row: up to the posters right above it
                 return true;
             }
             target = position - COLUMNS;
@@ -794,10 +800,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
         groupAdapter.setGroups(groups);
         boolean any = !groups.isEmpty();
         watchGroups.setVisibility(any ? View.VISIBLE : View.GONE);
-        if (!any) {
-            setWatchOpen(false);
-            return;
-        }
+        greeting.setVisibility(any ? View.GONE : View.VISIBLE);   // its line is the posters' room
+        setWatchOpen(any);
+        grid.requestLayout();   // the dock moves down a little when the watchlist shows
+        if (!any) return;
         lastGroup = 0;
         for (int i = 0; i < groups.size(); i++) if (groups.get(i).label.equals(lastGroupLabel)) lastGroup = i;
         shownGroup = -1;
@@ -837,25 +843,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
     }
 
     /**
-     * Opens or closes the posters. They cover the app row while open, so the row fades back (one hardware layer,
-     * cheap on this GPU) and returns when focus goes back down to it.
+     * Shows or hides the posters. They show whenever there is a watchlist, and step aside only while focus is
+     * down in the app grid, whose rows scroll up into their space.
      */
     private void setWatchOpen(boolean open) {
         if (open == watchOpen || (open && groups.isEmpty())) return;
         watchOpen = open;
-        int in = reducedMotion ? 80 : 180, out = reducedMotion ? 60 : 140;
         watchPanel.animate().cancel();
-        grid.animate().cancel();
         if (open) {
             placeWatchPanel();
             watchPanel.setVisibility(View.VISIBLE);
-            watchPanel.animate().alpha(1f).setDuration(in).start();
-            grid.animate().alpha(0f).setDuration(in).withLayer().start();
+            watchPanel.animate().alpha(1f).setDuration(reducedMotion ? 80 : 180).start();
         } else {
-            watchPanel.animate().alpha(0f).setDuration(out).withEndAction(() -> {
+            watchPanel.animate().alpha(0f).setDuration(reducedMotion ? 60 : 140).withEndAction(() -> {
                 if (!watchOpen) watchPanel.setVisibility(View.INVISIBLE);
             }).start();
-            grid.animate().alpha(1f).setDuration(in).withLayer().start();
         }
     }
 
