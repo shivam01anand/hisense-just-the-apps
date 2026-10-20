@@ -4,7 +4,7 @@
 has no ads, and it opens on something worth watching: new Hindi picks (or your language), this year's best,
 and your IMDb watchlist by genre. Pick a poster and it plays, whichever app has it.
 
-![The stock Hisense home screen with a sponsored row, next to the new home screen with a watchlist row and four apps](docs/before-after.jpg)
+![The stock Hisense home screen with a sponsored row, next to the new home screen: chips for Hindi, Continue, Recently added, 2026 and genres, a row of big posters, and the app row below](docs/before-after.jpg)
 
 ## Get started
 
