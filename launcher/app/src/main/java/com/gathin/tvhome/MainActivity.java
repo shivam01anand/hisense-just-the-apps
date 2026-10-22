@@ -940,10 +940,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 focusPoster(lastPoster);
                 return true;
+            // Left and Right move exactly one chip, here rather than through Android's focus search, which can
+            // find nothing in a horizontal row that has scrolled near its end and leave focus stuck.
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                return position == 0;
+                if (position > 0) focusGroup(position - 1);
+                return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                return position == groups.size() - 1;
+                if (position < groups.size() - 1) focusGroup(position + 1);
+                return true;
             default:
                 return false;
         }
@@ -1041,10 +1045,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, W
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 focusTile(lastFocused < COLUMNS ? lastFocused : 0);
                 return true;
+            // One poster per press, for the same reason as the chips.
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                return position == 0;
+                if (position > 0) focusPoster(position - 1);
+                return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                return position == watchAdapter.getItemCount() - 1;
+                if (position < watchAdapter.getItemCount() - 1) focusPoster(position + 1);
+                return true;
             default:
                 return false;
         }
